@@ -102,3 +102,17 @@ def test_no_connection_at_import_time(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATABASE_FILE", fake)
     importlib.reload(db)
     assert not fake.exists()
+
+
+def test_filter_invoices(db_path):
+    db.insert_invoice(make_invoice("h1", vendor="Amazon", number="A-1", total=100.0), db_path)
+    db.insert_invoice(make_invoice("h2", vendor="Swiggy", number="S-9", total=500.0), db_path)
+    df = db.get_all_invoices(db_path)
+    assert db.filter_invoices(df, search="swig")["vendor"].tolist() == ["Swiggy"]
+    assert db.filter_invoices(df, search="a-1")["vendor"].tolist() == ["Amazon"]
+    assert len(db.filter_invoices(df, min_amount=200)) == 1
+    assert len(db.filter_invoices(df, max_amount=200)) == 1
+    assert len(db.filter_invoices(df, vendors=["Amazon", "Swiggy"])) == 2
+    assert len(db.filter_invoices(df, start_date="2026-10-02")) == 0
+    assert len(db.filter_invoices(df, start_date="2026-09-01", end_date="2026-10-01")) == 2
+    assert len(db.filter_invoices(df, review_only=True)) == 0

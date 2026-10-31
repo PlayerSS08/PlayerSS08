@@ -114,3 +114,28 @@ def test_guessed_total_adds_warning():
     inv = parse_invoice("Corner Shop\nMilk 30.00\nBread 45.00", today=TODAY)
     assert inv.total_amount == 45.0
     assert "total guessed" in inv.warnings
+
+
+def test_apply_corrections_marks_fields_verified():
+    from extractor.parser import apply_corrections
+    inv = parse_invoice("Corner Shop\nMilk 30.00\nBread 45.00", today=TODAY)
+    assert inv.needs_review
+    fixed = apply_corrections(inv, {"total_amount": "75", "invoice_date": "2026-10-30",
+                                    "invoice_number": "CS-1", "vendor": "Corner Shop Ltd"},
+                              today=TODAY)
+    assert fixed.total_amount == 75.0
+    assert fixed.confidence["total_amount"] == 1.0
+    assert "total guessed" not in fixed.warnings
+    assert not fixed.needs_review
+    assert inv.total_amount == 45.0          # original untouched
+
+
+def test_convert_field():
+    import pytest
+    from extractor.parser import convert_field
+    assert convert_field("total_amount", "₹ 1,234.50") == 1234.5
+    assert convert_field("invoice_date", "31/10/2026") == "2026-10-31"
+    assert convert_field("vendor", "  ") is None
+    assert convert_field("gstin", "29aaacc1234f1z5") == "29AAACC1234F1Z5"
+    with pytest.raises(ValueError):
+        convert_field("total_amount", "abc")

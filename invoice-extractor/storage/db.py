@@ -225,3 +225,31 @@ def find_possible_duplicates(db_path: Optional[Path] = None) -> pd.DataFrame:
     """
     with connect(db_path) as conn:
         return pd.read_sql_query(query, conn)
+
+
+def filter_invoices(df: pd.DataFrame, search: str = "", start_date=None, end_date=None,
+                    vendors=None, min_amount=None, max_amount=None,
+                    review_only: bool = False) -> pd.DataFrame:
+    """
+    Filter a DataFrame from get_all_invoices() (pure: no database access).
+    `search` matches vendor or invoice number (case-insensitive).
+    Rows without a date are dropped only when a date range is given.
+    """
+    out = df.copy()
+    if search:
+        needle = search.strip().lower()
+        out = out[out["vendor"].fillna("").str.lower().str.contains(needle, regex=False)
+                  | out["invoice_number"].fillna("").str.lower().str.contains(needle, regex=False)]
+    if start_date is not None:
+        out = out[out["invoice_date"].fillna("") >= str(start_date)]
+    if end_date is not None:
+        out = out[(out["invoice_date"].fillna("") <= str(end_date)) & out["invoice_date"].notna()]
+    if vendors:
+        out = out[out["vendor"].isin(vendors)]
+    if min_amount is not None:
+        out = out[out["total_amount"].fillna(0) >= min_amount]
+    if max_amount is not None:
+        out = out[out["total_amount"].fillna(0) <= max_amount]
+    if review_only:
+        out = out[out["needs_review"]]
+    return out

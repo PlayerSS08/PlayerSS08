@@ -70,3 +70,64 @@ def process_file(path, display_name: Optional[str] = None,
                                 "images and scanned PDFs")
         invoice.needs_review = True
     return invoice
+
+
+# Fields a user can correct on the "Upload and Extract" page.
+EDITABLE_FIELDS = ("invoice_number", "invoice_date", "invoice_time", "vendor", "gstin",
+                   "subtotal", "cgst", "sgst", "igst", "total_amount")
+AMOUNT_FIELDS = ("subtotal", "cgst", "sgst", "igst", "total_amount")
+# Warnings produced by the validators / guesses; recomputed after an edit.
+DERIVED_WARNINGS = ("GST arithmetic mismatch", "invalid GSTIN", "total amount out of range",
+                    "invoice date is in the future", "total guessed")
+
+
+def convert_field(name: str, value):
+    """
+    Turn a value typed by the user into the stored type.
+    Amounts -> float, dates -> ISO string, blanks -> None.
+    Raises ValueError with a friendly message if it cannot be understood.
+    """
+    if value is None or (isinstance(value, float) and value != value):  # NaN
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if name in AMOUNT_FIELDS:
+        amount = fields.parse_amount(text)
+        if amount is None:
+            raise ValueError(f"'{text}' is not a valid amount for {name}")
+        return amount
+    if name == "invoice_date":
+        try:
+            return date.fromisoformat(text).isoformat()
+        except ValueError:
+            iso, _conf = fields.extract_date(text, today=date.max.replace(year=9998))
+            if iso is None:
+                raise ValueError(f"'{text}' is not a valid date (use YYYY-MM-DD)") from None
+            return iso
+    if name == "gstin":
+        return text.upper()
+    return text
+
+
+def apply_corrections(invoice: InvoiceData, changes: dict,
+                      today: Optional[date] = None) -> InvoiceData:
+    """
+    Return a copy of `invoice` with user-corrected values.
+    Corrected fields get confidence 1.0 (a human checked them) and the
+    validators are run again so needs_review reflects the new values.
+    """
+    from dataclasses import replace
+    fixed = replace(invoice, confidence=dict(invoice.confidence),
+                    warnings=[w for w in invoice.warnings if w not in DERIVED_WARNINGS])
+    for name, raw in changes.items():
+        if name not in EDITABLE_FIELDS:
+            continue
+        value = convert_field(name, raw)
+        if value != getattr(invoice, name):
+            setattr(fixed, name, value)
+            fixed.confidence[name] = 1.0 if value is not None else 0.0
+    if invoice.confidence.get("total_amount") == fields.TOTAL_GUESS_CONFIDENCE \
+            and fixed.confidence.get("total_amount") != 1.0:
+        fixed.add_warning("total guessed")
+    return validators.validate_invoice(fixed, today)
