@@ -1,0 +1,15 @@
+# IDE / editor folders
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Runtime data (database and drop-in folder)
+data/
+invoices/
+*.db

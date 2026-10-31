@@ -1,0 +1,12 @@
+pymupdf
+pdfplumber
+pytesseract
+opencv-python-headless
+Pillow
+numpy
+python-dateutil
+pandas
+openpyxl
+streamlit
+plotly
+pytest
