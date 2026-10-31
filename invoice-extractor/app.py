@@ -18,6 +18,7 @@ import pandas as pd
 import streamlit as st
 
 import config
+from analytics import dashboard
 from extractor import ocr
 from extractor.parser import EDITABLE_FIELDS, apply_corrections, convert_field, process_file
 from storage import db, export
@@ -294,11 +295,54 @@ def apply_record_changes(original: pd.DataFrame, edited: pd.DataFrame):
 
 
 # ======================================================================
+# Page 3: Dashboard
+# ======================================================================
+def page_dashboard():
+    st.header("Dashboard")
+    df = db.get_all_invoices()
+    if df.empty:
+        st.info("No invoices saved yet.")
+        return
+
+    metrics = dashboard.summary_metrics(df)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total invoices", metrics["total_invoices"])
+    m2.metric("Total spend", f"₹ {metrics['total_spend']:,.2f}")
+    m3.metric("Average invoice", f"₹ {metrics['average_invoice']:,.2f}")
+    m4.metric("Need review", metrics["needs_review"])
+
+    left, right = st.columns(2)
+    left.plotly_chart(dashboard.vendor_figure(df), use_container_width=True)
+    right.plotly_chart(dashboard.month_figure(df), use_container_width=True)
+
+    left, right = st.columns(2)
+    with left:
+        if dashboard.gst_breakdown(df).empty:
+            st.info("No GST amounts found in the saved invoices.")
+        else:
+            st.plotly_chart(dashboard.gst_figure(df), use_container_width=True)
+    with right:
+        st.subheader("Possible duplicate invoices")
+        st.caption("Same vendor, invoice number and total.")
+        duplicates = db.find_possible_duplicates()
+        if duplicates.empty:
+            st.success("No duplicates found.")
+        else:
+            st.dataframe(duplicates, hide_index=True, use_container_width=True)
+
+    with st.expander("Data tables behind the charts"):
+        a, b = st.columns(2)
+        a.dataframe(dashboard.spend_by_vendor(df), hide_index=True)
+        b.dataframe(dashboard.spend_by_month(df), hide_index=True)
+
+
+# ======================================================================
 # Main
 # ======================================================================
 PAGES = {
     "Upload and Extract": page_upload,
     "Invoice Records": page_records,
+    "Dashboard": page_dashboard,
 }
 
 

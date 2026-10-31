@@ -37,3 +37,9 @@ def test_records_page_renders():
     app = run_page("Invoice Records")
     assert not app.exception
     assert "Showing 1 of 1" in app.caption[0].value
+
+
+def test_dashboard_page_renders():
+    app = run_page("Dashboard")
+    assert not app.exception
+    assert app.metric[0].value == "1"
