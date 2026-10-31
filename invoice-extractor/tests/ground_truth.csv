@@ -1,0 +1,19 @@
+file,invoice_number,invoice_date,invoice_time,vendor,total_amount
+amazon_order.pdf,BLR8-778812,2026-10-03,,Sunrise Retail Private Limited,1000.00
+flipkart_shoes.pdf,FAAB2026001234,2026-09-15,,Kavya Fashions,1739.00
+swiggy_dinner.pdf,172233445566,2026-09-21,20:42,Swiggy,550.00
+zomato_lunch.png,7781234560,2026-10-05,13:15,Zomato,454.50
+bescom_electricity.pdf,2610051234,2026-10-05,,BESCOM,1780.00
+airtel_postpaid.pdf,AP0926778812,2026-09-28,,Airtel,588.82
+jio_recharge.png,,2026-10-12,09:05:44,Jio,299.00
+annapoorna_photo.jpg,1187,2026-09-30,13:45,Hotel Annapoorna,210.00
+brew_corner_receipt.png,BC-20456,2026-10-18,17:32,Brew Corner Cafe,315.00
+sai_medicals_photo.jpg,SSM/2611,2026-10-07,,Sri Sai Medicals,225.00
+ganesh_hardware_scan.pdf,GH-0921,2026-09-11,,Ganesh Hardware,719.80
+lakshmi_stores_handwritten.jpg,342,2026-09-25,,Lakshmi Stores,625.00
+uber_trip.pdf,UBR-IN-55102938,2026-10-16,07:48,Uber,432.36
+bigbasket_grocery.pdf,BB/KA/26/0098812,2026-10-09,,BigBasket,411.00
+city_fuels_receipt.png,558812,2026-10-19,18:04,City Fuels,2000.00
+paper_plus_invoice.pdf,PPS/2026/0457,2026-08-22,,Paper Plus Stationers,4059.20
+rangoli_textiles_scan.pdf,RT-7781,2026-08-03,,Rangoli Textiles,3517.50
+zepto_order.pdf,ZP26KA00451122,2026-10-20,22:12,Zepto,108.00

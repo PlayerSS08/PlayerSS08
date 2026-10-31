@@ -291,3 +291,21 @@ def test_igst(text, expected):
 ])
 def test_subtotal(text, expected):
     assert fields.extract_subtotal(text)[0] == expected
+
+
+def test_vendor_skips_address_between_name_and_gstin():
+    text = "PAPER PLUS STATIONERS\n12 Brigade Road, Bengaluru 560001\nGSTIN: 29AAGFP7788K1ZS"
+    assert fields.extract_vendor(text, known_vendors=KNOWN) == ("Paper Plus Stationers", 0.7)
+
+
+def test_vendor_ignores_ocr_noise_and_fixes_exclamation():
+    text = "nana\nSRI SA! MEDICALS\nChemist & Druggist, Anna Nagar"
+    assert fields.extract_vendor(text, known_vendors=KNOWN)[0] == "Sri Sai Medicals"
+
+
+@pytest.mark.parametrize("line, is_address", [
+    ("12 Brigade Road, Bengaluru 560001", True), ("Station Road", True),
+    ("Chickpet, Bengaluru", True), ("Ganesh Hardware", False), ("Hotel Annapoorna", False),
+])
+def test_looks_like_address(line, is_address):
+    assert fields.looks_like_address(line) is is_address

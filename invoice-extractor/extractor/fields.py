@@ -482,9 +482,23 @@ _STOP_FIRST_WORDS = {"gstin", "gst", "pan", "registration", "address", "details"
                      "state", "code", "no", "number", "date", "to"}
 
 
+# Words that show a line is an address, not a business name.
+_ADDRESS_RE = re.compile(
+    r",|\b\d{6}\b|\b(?:road|rd|street|st|nagar|lane|layout|cross|main|floor|plot|"
+    r"sector|colony|phase|block|near|opp|behind|india|district|taluk|pin|po)\b\.?",
+    re.IGNORECASE,
+)
+
+
+def looks_like_address(line: str) -> bool:
+    """True for lines such as '12 Brigade Road, Bengaluru 560001'."""
+    return bool(_ADDRESS_RE.search(line))
+
+
 def clean_vendor(name: str) -> str:
     """Strip, title-case if ALL CAPS, remove trailing punctuation."""
     name = re.sub(r"\s+", " ", name or "").strip(" :-\t")
+    name = re.sub(r"(?<=[A-Za-z])!(?=[A-Za-z\s]|$)", "I", name)   # OCR: SA! -> SAI
     name = name.rstrip(".,;:-*|").strip()
     if name.isupper():
         name = name.title()
@@ -502,6 +516,8 @@ def _looks_like_name(line: str) -> bool:
     letters = sum(ch.isalpha() for ch in line)
     if letters < 3 or len(line) > 60 or letters / max(len(line), 1) < 0.5:
         return False
+    if " " not in line and line.islower() and letters < 5:
+        return False          # short lowercase scrap, usually OCR noise
     if _NOT_A_NAME_RE.search(line) or _is_generic(line):
         return False
     first_word = re.findall(r"[a-z]+", line.lower())[:1]
@@ -524,11 +540,16 @@ def _vendor_from_label(lines: list) -> Optional[str]:
 
 
 def _vendor_near_gstin(lines: list) -> Optional[str]:
-    """Rule 2: the line just above (or below) the first GSTIN."""
+    """
+    Rule 2: the line just above (or below) the first GSTIN.
+    Address lines in between are skipped (Name / Address / GSTIN layout),
+    looking at most 3 lines up.
+    """
     for i, line in enumerate(lines):
         if GSTIN_RE.search(line.upper()):
-            for j in (i - 1, i + 1):
-                if 0 <= j < len(lines) and _looks_like_name(lines[j]):
+            for j in (i - 1, i - 2, i - 3, i + 1):
+                if 0 <= j < len(lines) and _looks_like_name(lines[j]) \
+                        and not looks_like_address(lines[j]):
                     return clean_vendor(lines[j])
             return None
     return None
@@ -561,7 +582,7 @@ def _vendor_from_dictionary(text: str, known_vendors) -> Optional[str]:
 def _vendor_from_first_line(lines: list) -> Optional[str]:
     """Rule 4: the first line that is not a generic heading."""
     for line in lines[:15]:
-        if _looks_like_name(line):
+        if _looks_like_name(line) and not looks_like_address(line):
             return clean_vendor(line)
     return None
 
