@@ -337,12 +337,35 @@ def page_dashboard():
 
 
 # ======================================================================
+# Page 4: Batch Scan
+# ======================================================================
+def page_batch():
+    from scripts.scan_folder import list_invoice_files, scan_folder
+
+    st.header("Batch Scan")
+    folder = config.INVOICE_FOLDER
+    folder.mkdir(parents=True, exist_ok=True)
+    st.caption(f"Processes every PDF / image in the folder: {folder}")
+    ocr_banner()
+    files = list_invoice_files(folder)
+    st.write(f"{len(files)} file(s) waiting in the folder.")
+    if st.button("Scan invoices folder", type="primary", disabled=not files):
+        with st.spinner("Scanning..."):
+            results = scan_folder(folder)
+        counts = pd.Series([r["status"] for r in results]).value_counts().to_dict()
+        st.success(f"Added {counts.get('ADDED', 0)}, flagged for review "
+                   f"{counts.get('REVIEW', 0)}, already saved {counts.get('EXISTS', 0)}.")
+        st.dataframe(pd.DataFrame(results), hide_index=True, use_container_width=True)
+
+
+# ======================================================================
 # Main
 # ======================================================================
 PAGES = {
     "Upload and Extract": page_upload,
     "Invoice Records": page_records,
     "Dashboard": page_dashboard,
+    "Batch Scan": page_batch,
 }
 
 

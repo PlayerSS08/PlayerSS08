@@ -43,3 +43,8 @@ def test_dashboard_page_renders():
     app = run_page("Dashboard")
     assert not app.exception
     assert app.metric[0].value == "1"
+
+
+def test_batch_page_renders():
+    app = run_page("Batch Scan")
+    assert not app.exception

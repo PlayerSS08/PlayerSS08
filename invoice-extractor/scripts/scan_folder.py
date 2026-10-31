@@ -1,162 +1,106 @@
-import re
-import sqlite3
+"""
+Batch scanner: process every invoice in the invoices/ folder.
+
+This is the descendant of the original Scanner.py. Its ideas are kept:
+* the invoice-number regex now lives (extended) in extractor/fields.py
+* INSERT OR IGNORE de-duplication now lives in storage/db.py, keyed on
+  the file hash instead of the invoice number
+* the "REVIEW" message is still printed - but the file is now saved and
+  flagged needs_review instead of being skipped
+* the summary and the database table are printed at the end, as before
+
+Usage (from the project folder):
+    python scripts/scan_folder.py            # scan ./invoices
+    python scripts/scan_folder.py some/dir   # scan another folder
+"""
+
+import sys
 from pathlib import Path
-from datetime import datetime
 
-import pymupdf
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # project root
 
-# ==============================
-# CONFIGURATION
-# ==============================
-
-INVOICE_FOLDER = Path("invoices")
-DATABASE_FILE = "Manager"
-
-# Create invoices folder if it doesn't exist
-INVOICE_FOLDER.mkdir(exist_ok=True)
-
-# ==============================
-# DATABASE SETUP
-# ==============================
-
-conn = sqlite3.connect(DATABASE_FILE)
-
-conn.execute("""
-    CREATE TABLE IF NOT EXISTS invoices (
-        serial_no INTEGER PRIMARY KEY AUTOINCREMENT,
-        invoice_number TEXT NOT NULL UNIQUE,
-        source_file TEXT NOT NULL,
-        date_added TEXT NOT NULL
-    )
-""")
-conn.commit()
+import config  # noqa: E402
+from extractor.parser import process_file  # noqa: E402
+from extractor.text_extraction import hash_file  # noqa: E402
+from storage import db  # noqa: E402
 
 
-# ==============================
-# EXTRACT INVOICE NUMBERS
-# ==============================
-
-def extract_invoice_numbers(pdf_path):
-    """Extract all invoice numbers from a text-based PDF."""
-
-    try:
-        with pymupdf.open(pdf_path) as document:
-            text = "\n".join(
-                page.get_text() for page in document
-            )
-
-        pattern = (
-            r"\bInvoice\s*(?:Number|No\.?)\s*#?\s*"
-            r"[:\-]?\s*([A-Z0-9][A-Z0-9/-]{4,})"
-        )
-
-        return list(dict.fromkeys(
-            match.group(1).strip()
-            for match in re.finditer(
-                pattern, text, re.IGNORECASE
-            )
-        ))
-
-    except Exception as error:
-        print(f"ERROR reading {pdf_path.name}: {error}")
-        return []
+def list_invoice_files(folder: Path) -> list:
+    """All supported files (PDF and images) in the folder, sorted by name."""
+    return sorted(p for p in folder.glob("*")
+                  if p.is_file() and p.suffix.lower() in config.SUPPORTED_EXTENSIONS)
 
 
-# ==============================
-# SCAN AND SAVE INVOICES
-# ==============================
+def scan_folder(folder=None, db_path=None) -> list:
+    """
+    Process every file in `folder` and save new ones to the database.
+    Returns one dict per file: file, status (ADDED / EXISTS / REVIEW),
+    vendor, invoice_number, invoice_date, total_amount, warnings.
+    """
+    folder = Path(folder or config.INVOICE_FOLDER)
+    folder.mkdir(parents=True, exist_ok=True)
+    db.init_db(db_path)
 
-def scan_invoices():
-    """Scan PDFs and append new invoice records."""
-
-    pdf_files = sorted(INVOICE_FOLDER.glob("*.pdf"))
-
-    total_found = 0
-    total_added = 0
-
-    if not pdf_files:
-        print("No PDF invoices found in the invoices folder.")
-
-    for pdf_path in pdf_files:
-        invoice_numbers = extract_invoice_numbers(pdf_path)
-
-        if not invoice_numbers:
-            print(f"REVIEW: No invoice number found in {pdf_path.name}")
+    results = []
+    for path in list_invoice_files(folder):
+        if db.hash_exists(hash_file(path), db_path):
+            results.append({"file": path.name, "status": "EXISTS"})
             continue
+        invoice = process_file(path)
+        db.insert_invoice(invoice, db_path)
+        results.append({
+            "file": path.name,
+            "status": "REVIEW" if invoice.needs_review else "ADDED",
+            "vendor": invoice.vendor,
+            "invoice_number": invoice.invoice_number,
+            "invoice_date": invoice.invoice_date,
+            "total_amount": invoice.total_amount,
+            "warnings": "; ".join(invoice.warnings),
+        })
+    return results
 
-        for invoice_number in invoice_numbers:
-            total_found += 1
 
-            # Generate local timezone-aware timestamp
-            date_added = datetime.now().astimezone().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-
-            cursor = conn.execute(
-                """
-                INSERT OR IGNORE INTO invoices
-                    (invoice_number, source_file, date_added)
-                VALUES (?, ?, ?)
-                """,
-                (invoice_number, pdf_path.name, date_added),
-            )
-
-            if cursor.rowcount == 1:
-                total_added += 1
-                print(f"ADDED: {invoice_number} | {date_added}")
-            else:
-                print(f"EXISTS: {invoice_number}")
-
-    conn.commit()
+def print_summary(results: list) -> None:
+    """Console output in the style of the original Scanner.py."""
+    for r in results:
+        if r["status"] == "EXISTS":
+            print(f"EXISTS: {r['file']}")
+        else:
+            print(f"{r['status']}: {r['file']} | {r['vendor']} | {r['invoice_number']} | "
+                  f"{r['invoice_date']} | {r['total_amount']}")
+            if r["status"] == "REVIEW":
+                print(f"        needs review: {r['warnings'] or 'low confidence fields'}")
 
     print("\n========== SCAN SUMMARY ==========")
-    print(f"PDF files scanned: {len(pdf_files)}")
-    print(f"Invoice numbers found: {total_found}")
-    print(f"New records added: {total_added}")
-    print(f"Database file: {DATABASE_FILE}")
+    print(f"Files scanned: {len(results)}")
+    print(f"New records added: {sum(r['status'] != 'EXISTS' for r in results)}")
+    print(f"Flagged for review: {sum(r['status'] == 'REVIEW' for r in results)}")
+    print(f"Database file: {config.DATABASE_FILE}")
 
 
-# ==============================
-# DISPLAY DATABASE TABLE
-# ==============================
-
-def show_database():
-    """Display all saved invoice records."""
-
-    rows = conn.execute("""
-        SELECT serial_no, invoice_number, source_file, date_added
-        FROM invoices
-        ORDER BY serial_no
-    """).fetchall()
-
-    print("\n================ MANAGER DATABASE ================")
-    print(
-        f"{'S.No.':<8}"
-        f"{'Invoice Number':<26}"
-        f"{'Source File':<32}"
-        f"{'Date Added':<20}"
-    )
-    print("-" * 86)
-
-    for serial_no, invoice_number, source_file, date_added in rows:
-        print(
-            f"{serial_no:<8}"
-            f"{invoice_number:<26}"
-            f"{source_file:<32}"
-            f"{date_added:<20}"
-        )
-
-    print("-" * 86)
-    print(f"Total unique invoices: {len(rows)}")
+def show_database(db_path=None) -> None:
+    """Print all saved invoices as a table (like the old show_database)."""
+    df = db.get_all_invoices(db_path)
+    print("\n================ INVOICE DATABASE ================")
+    print(f"{'ID':<5}{'Date':<12}{'Vendor':<28}{'Invoice No.':<22}{'Total':>12}  Review")
+    print("-" * 88)
+    for _, row in df.sort_values("id").iterrows():
+        total = f"{row['total_amount']:,.2f}" if row["total_amount"] == row["total_amount"] else "-"
+        print(f"{row['id']:<5}{str(row['invoice_date'] or '-'):<12}"
+              f"{str(row['vendor'] or '-')[:26]:<28}{str(row['invoice_number'] or '-')[:20]:<22}"
+              f"{total:>12}  {'yes' if row['needs_review'] else ''}")
+    print("-" * 88)
+    print(f"Total invoices: {len(df)}")
 
 
-# ==============================
-# MAIN PROGRAM
-# ==============================
+def main(argv=None) -> None:
+    argv = sys.argv[1:] if argv is None else argv
+    folder = Path(argv[0]) if argv else config.INVOICE_FOLDER
+    if not folder.exists() or not list_invoice_files(folder):
+        print(f"No invoices found in {folder}.")
+    print_summary(scan_folder(folder))
+    show_database()
+
 
 if __name__ == "__main__":
-    try:
-        scan_invoices()
-        show_database()
-    finally:
-        conn.close()
+    main()
