@@ -25,7 +25,7 @@ from storage import db, export
 
 FIELD_LABELS = {
     "invoice_number": "Invoice number",
-    "invoice_date": "Invoice date (YYYY-MM-DD)",
+    "invoice_date": "Date (YYYY-MM-DD)",
     "invoice_time": "Time (HH:MM)",
     "vendor": "Vendor / source",
     "gstin": "GSTIN",
@@ -71,9 +71,15 @@ def fields_table(invoice) -> pd.DataFrame:
         score = invoice.confidence.get(name)
         low = name in SCORED_FIELDS and (score or 0) < config.REVIEW_THRESHOLD
         optional_missing = name in ("invoice_time", "gstin") and value is None
+        if value is None:
+            shown = ""
+        elif isinstance(value, float):
+            shown = f"{value:.2f}"
+        else:
+            shown = str(value)
         rows.append({
             "Field": FIELD_LABELS[name],
-            "Value": "" if value is None else str(value),
+            "Value": shown,
             "Confidence": score,
             "Check": "⚠️ check" if low and not optional_missing else "",
             "key": name,
@@ -174,7 +180,7 @@ def show_result_card(key: str, result: dict):
             )
 
             can_act = result["status"] == "pending" and not duplicate
-            save_col, skip_col, _ = st.columns([1, 1, 3])
+            save_col, skip_col, _ = st.columns([2, 1, 3])
             if save_col.button("Save to database", key=f"save_{key}", type="primary",
                                disabled=not can_act):
                 save_edited(key, result, edited)
@@ -254,8 +260,15 @@ def page_records():
         disabled=[c for c in RECORD_COLUMNS if c not in EDITABLE_RECORD_COLUMNS],
         column_config={
             "Delete": st.column_config.CheckboxColumn("Delete"),
+            "id": "ID", "invoice_date": "Date", "invoice_time": "Time", "vendor": "Vendor",
+            "invoice_number": "Invoice no.", "gstin": "GSTIN", "warnings": "Warnings",
             "total_amount": st.column_config.NumberColumn("Total", format="₹ %.2f"),
+            "subtotal": st.column_config.NumberColumn("Subtotal", format="%.2f"),
+            "cgst": st.column_config.NumberColumn("CGST", format="%.2f"),
+            "sgst": st.column_config.NumberColumn("SGST", format="%.2f"),
+            "igst": st.column_config.NumberColumn("IGST", format="%.2f"),
             "needs_review": st.column_config.CheckboxColumn("Needs review"),
+            "extraction_method": "Method", "source_file": "File", "scanned_at": "Scanned at",
         },
     )
 

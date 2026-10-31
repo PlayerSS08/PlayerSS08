@@ -149,15 +149,18 @@ def _label_regex(label: str) -> str:
     return r"\s*".join(re.escape(word) for word in label.split())
 
 
-def extract_labeled_amount(text: str, labels: list,
-                           exclude_after: str = "", exclude_before: tuple = ()) -> Optional[float]:
+def extract_labeled_amount(text: str, labels: list, exclude_after: str = "",
+                           exclude_before: tuple = (), line_start: bool = False) -> Optional[float]:
     """
     Find the amount next to any of `labels` (tried in priority order).
     The LAST occurrence of a label wins, since summaries are at the bottom.
+    With line_start=True the label must begin the line, so a word inside an
+    item-table row (e.g. "... 18% IGST 61.02 400.00") is not mistaken for
+    the summary line.
     """
     lines = _lines(text)
     for label in labels:
-        pattern = r"\b" + _label_regex(label) + r"\b"
+        pattern = (r"^[\W_]*" if line_start else "") + r"\b" + _label_regex(label) + r"\b"
         for before in exclude_before:
             pattern = rf"(?<!{before})" + pattern
         if exclude_after:
@@ -360,6 +363,7 @@ def extract_time(text: str, today: Optional[date] = None) -> tuple:
 TOTAL_LABELS = [
     "Grand Total", "Total Amount", "Amount Payable", "Net Payable", "Net Amount",
     "Amount Due", "Balance Due", "Total", "Invoice Total", "Bill Amount",
+    "Amount Paid",   # extra label (UPI / recharge receipts), lowest priority
 ]
 # A "Total" label followed by one of these is NOT the final total.
 TOTAL_EXCLUDE_AFTER = (r"tax\b|gst\b|qty|quantity|items?\b|discount|savings?|saved|"
@@ -426,7 +430,7 @@ def extract_gstin(text: str) -> tuple:
 
 def _tax_amount(text: str, label: str) -> tuple:
     """Amount on the last line labelled CGST / SGST / IGST (percentages ignored)."""
-    value = extract_labeled_amount(normalize_text(text), [label])
+    value = extract_labeled_amount(normalize_text(text), [label], line_start=True)
     return (value, 0.8) if value is not None else (None, 0.0)
 
 
@@ -448,7 +452,7 @@ def extract_igst(text: str) -> tuple:
 
 def extract_subtotal(text: str) -> tuple:
     """Amount before tax."""
-    value = extract_labeled_amount(normalize_text(text), SUBTOTAL_LABELS)
+    value = extract_labeled_amount(normalize_text(text), SUBTOTAL_LABELS, line_start=True)
     return (value, 0.8) if value is not None else (None, 0.0)
 
 

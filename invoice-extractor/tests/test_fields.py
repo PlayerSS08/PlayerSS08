@@ -309,3 +309,10 @@ def test_vendor_ignores_ocr_noise_and_fixes_exclamation():
 ])
 def test_looks_like_address(line, is_address):
     assert fields.looks_like_address(line) is is_address
+
+
+def test_tax_label_inside_item_row_is_ignored():
+    text = ("1 Mouse ₹508.47 1 ₹508.47 18% IGST ₹91.53 ₹600.00\n"
+            "TOTAL: ₹152.55 ₹1,000.00")
+    assert fields.extract_igst(text) == (None, 0.0)
+    assert fields.extract_igst(text + "\nIGST @ 18% 152.55")[0] == 152.55

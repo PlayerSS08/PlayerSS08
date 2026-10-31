@@ -72,7 +72,8 @@ def format_table(scores: dict, markdown: bool = False) -> str:
         lines = ["| Field | Correct / Total | Accuracy |", "|---|---|---|"]
         for field, (ok, total) in scores.items():
             pct = 100 * ok / total if total else 0
-            lines.append(f"| {field} {note.get(field, '')} | {ok} / {total} | {pct:.1f}% |")
+            label = f"{field} {note.get(field, '')}".strip()
+            lines.append(f"| {label} | {ok} / {total} | {pct:.1f}% |")
         return "\n".join(lines)
     lines = [f"{'Field':<17}{'Correct / Total':<19}Accuracy"]
     for field, (ok, total) in scores.items():

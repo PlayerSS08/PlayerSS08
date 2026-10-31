@@ -17,11 +17,14 @@ Usage (from the project folder):
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # project root
 
 import config  # noqa: E402
 from extractor.parser import process_file  # noqa: E402
 from extractor.text_extraction import hash_file  # noqa: E402
+from extractor.validators import low_confidence_fields  # noqa: E402
 from storage import db  # noqa: E402
 
 
@@ -55,7 +58,8 @@ def scan_folder(folder=None, db_path=None) -> list:
             "invoice_number": invoice.invoice_number,
             "invoice_date": invoice.invoice_date,
             "total_amount": invoice.total_amount,
-            "warnings": "; ".join(invoice.warnings),
+            "warnings": "; ".join(invoice.warnings
+                                  + [f"low confidence: {f}" for f in low_confidence_fields(invoice)]),
         })
     return results
 
@@ -69,7 +73,7 @@ def print_summary(results: list) -> None:
             print(f"{r['status']}: {r['file']} | {r['vendor']} | {r['invoice_number']} | "
                   f"{r['invoice_date']} | {r['total_amount']}")
             if r["status"] == "REVIEW":
-                print(f"        needs review: {r['warnings'] or 'low confidence fields'}")
+                print(f"        needs review: {r['warnings'] or 'missing fields'}")
 
     print("\n========== SCAN SUMMARY ==========")
     print(f"Files scanned: {len(results)}")
@@ -84,10 +88,13 @@ def show_database(db_path=None) -> None:
     print("\n================ INVOICE DATABASE ================")
     print(f"{'ID':<5}{'Date':<12}{'Vendor':<28}{'Invoice No.':<22}{'Total':>12}  Review")
     print("-" * 88)
+    def show(value, width):
+        return ("-" if pd.isna(value) else str(value))[:width]
+
     for _, row in df.sort_values("id").iterrows():
-        total = f"{row['total_amount']:,.2f}" if row["total_amount"] == row["total_amount"] else "-"
-        print(f"{row['id']:<5}{str(row['invoice_date'] or '-'):<12}"
-              f"{str(row['vendor'] or '-')[:26]:<28}{str(row['invoice_number'] or '-')[:20]:<22}"
+        total = "-" if pd.isna(row["total_amount"]) else f"{row['total_amount']:,.2f}"
+        print(f"{row['id']:<5}{show(row['invoice_date'], 10):<12}"
+              f"{show(row['vendor'], 26):<28}{show(row['invoice_number'], 20):<22}"
               f"{total:>12}  {'yes' if row['needs_review'] else ''}")
     print("-" * 88)
     print(f"Total invoices: {len(df)}")
