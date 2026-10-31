@@ -34,7 +34,7 @@ _NUMERIC_TOKEN_RE = re.compile(
 )
 
 # Rs / Rs. / INR / unicode rupee variants -> the single symbol "₹".
-_CURRENCY_RE = re.compile(r"(?<![A-Za-z])(?:Rs\.?|INR|₨)(?![A-Za-z])\s*", re.IGNORECASE)
+_CURRENCY_RE = re.compile(r"(?<![A-Za-z])(?:Rs[.,]?|INR|₨)(?![A-Za-z])\s*", re.IGNORECASE)
 
 
 def fix_ocr_digits(token: str) -> str:

@@ -39,3 +39,34 @@ def parse_invoice(text: str, source_file: str = "", file_hash: str = "",
     if not clean.strip():
         invoice.add_warning("no text could be extracted")
     return validators.validate_invoice(invoice, today)
+
+
+def process_file(path, display_name: Optional[str] = None,
+                 today: Optional[date] = None) -> InvoiceData:
+    """
+    Full pipeline for one file on disk: hash -> text -> parse -> validate.
+    Never raises; problems become warnings and needs_review = True.
+    """
+    from pathlib import Path
+    from extractor import ocr, text_extraction
+
+    path = Path(path)
+    name = display_name or path.name
+    try:
+        file_hash = text_extraction.hash_file(path)
+    except OSError as error:
+        invoice = InvoiceData(source_file=name, file_hash="", extraction_method="failed")
+        invoice.add_warning(f"could not read file: {error}")
+        invoice.needs_review = True
+        return invoice
+
+    text, method = text_extraction.get_text(path)
+    invoice = parse_invoice(text, name, file_hash, method, today)
+    if method == "failed":
+        if path.suffix.lower() not in config.SUPPORTED_EXTENSIONS:
+            invoice.add_warning("unsupported file type")
+        elif not ocr.ocr_available():
+            invoice.add_warning("OCR engine not available - install Tesseract to read "
+                                "images and scanned PDFs")
+        invoice.needs_review = True
+    return invoice
