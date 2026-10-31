@@ -9,14 +9,14 @@ from datetime import date
 from typing import Optional
 
 import config
-from extractor import fields
+from extractor import fields, validators
 from extractor.models import InvoiceData
 
 
 def parse_invoice(text: str, source_file: str = "", file_hash: str = "",
                   extraction_method: str = "pdf_text",
                   today: Optional[date] = None) -> InvoiceData:
-    """Run every field extractor over the text and collect the results."""
+    """Run every field extractor over the text, then validate the result."""
     clean = fields.normalize_text(text)
     invoice = InvoiceData(source_file=source_file, file_hash=file_hash,
                           extraction_method=extraction_method, raw_text=text or "",
@@ -38,4 +38,4 @@ def parse_invoice(text: str, source_file: str = "", file_hash: str = "",
         invoice.add_warning("total guessed")
     if not clean.strip():
         invoice.add_warning("no text could be extracted")
-    return invoice
+    return validators.validate_invoice(invoice, today)
