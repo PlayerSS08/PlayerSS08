@@ -81,3 +81,26 @@ def test_scanned_pdf_falls_back_to_ocr(tmp_path):
     text, method = text_extraction.get_text(pdf)
     assert method == "pdf_ocr"
     assert "4521" in text
+
+
+def test_bundled_language_data_is_shipped():
+    import config
+    assert (config.TESSDATA_DIR / "eng.traineddata").exists()
+
+
+@pytest.mark.skipif(not ocr.bundled_available(), reason="tesserocr not installed")
+def test_bundled_engine_reads_text():
+    text = ocr._ocr_bundled(ocr.preprocess_image(text_image()))
+    assert "4521" in text
+
+
+def test_engine_preference(monkeypatch):
+    import config
+    monkeypatch.setattr(ocr, "bundled_available", lambda: True)
+    monkeypatch.setattr(ocr, "tesseract_available", lambda: True)
+    monkeypatch.setattr(config, "OCR_ENGINE", "auto")
+    assert ocr.active_engine() == "bundled"
+    monkeypatch.setattr(config, "OCR_ENGINE", "tesseract")
+    assert ocr.active_engine() == "tesseract"
+    monkeypatch.setattr(ocr, "tesseract_available", lambda: False)
+    assert ocr.active_engine() == "bundled"      # falls back

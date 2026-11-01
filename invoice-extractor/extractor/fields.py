@@ -520,8 +520,8 @@ def _looks_like_name(line: str) -> bool:
     letters = sum(ch.isalpha() for ch in line)
     if letters < 3 or len(line) > 60 or letters / max(len(line), 1) < 0.5:
         return False
-    if " " not in line and line.islower() and letters < 5:
-        return False          # short lowercase scrap, usually OCR noise
+    if line.islower() and letters < 8:
+        return False          # short all-lowercase scrap, usually OCR noise
     if _NOT_A_NAME_RE.search(line) or _is_generic(line):
         return False
     first_word = re.findall(r"[a-z]+", line.lower())[:1]

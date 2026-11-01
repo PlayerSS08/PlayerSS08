@@ -10,3 +10,4 @@ openpyxl
 streamlit
 plotly
 pytest
+tesserocr

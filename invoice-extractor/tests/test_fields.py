@@ -299,7 +299,7 @@ def test_vendor_skips_address_between_name_and_gstin():
 
 
 def test_vendor_ignores_ocr_noise_and_fixes_exclamation():
-    text = "nana\nSRI SA! MEDICALS\nChemist & Druggist, Anna Nagar"
+    text = "nee ean\nnana\nSRI SA! MEDICALS\nChemist & Druggist, Anna Nagar"
     assert fields.extract_vendor(text, known_vendors=KNOWN)[0] == "Sri Sai Medicals"
 
 

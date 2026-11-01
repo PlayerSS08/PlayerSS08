@@ -5,8 +5,9 @@ Pipeline (each step is a small function so it can be explained and tested):
     grayscale -> upscale if small -> denoise -> deskew -> adaptive threshold
     -> Tesseract with --psm 6 and --psm 4, keep the more confident result
 
-Engines: Tesseract (default, via pytesseract) or EasyOCR (optional, only
-if it is installed), selected by config.OCR_ENGINE. If no engine is
+Engines (see ENGINE_ORDER): the Tesseract 5 engine bundled in the
+`tesserocr` pip package (no separate install needed), an installed
+Tesseract program (via pytesseract), or EasyOCR (optional). If no engine is
 available an OCRUnavailableError with a clear message is raised; callers
 (text_extraction.get_text) catch it so the app never crashes.
 """
@@ -24,7 +25,9 @@ TESSERACT_CONFIGS = ("--oem 3 --psm 6", "--oem 3 --psm 4")
 
 INSTALL_HELP = (
     "No OCR engine is available, so images and scanned PDFs cannot be read "
-    "(digital PDFs still work). Install Tesseract: Windows - UB Mannheim "
+    "(digital PDFs still work). Easiest fix: 'pip install -r requirements.txt' "
+    "(installs the bundled Tesseract engine) and keep the tessdata/ folder. "
+    "Or install Tesseract: Windows - UB Mannheim "
     "installer (https://github.com/UB-Mannheim/tesseract/wiki); Mac - "
     "'brew install tesseract'; Linux - 'sudo apt install tesseract-ocr'. "
     "Or 'pip install easyocr' and set OCR_ENGINE = \"easyocr\" in config.py."
@@ -122,11 +125,51 @@ def load_image(path) -> np.ndarray:
 # ======================================================================
 # OCR engines
 # ======================================================================
+# Engine names:
+#   "bundled"   - Tesseract 5 shipped inside the `tesserocr` pip package, with
+#                 the English model in this project's tessdata/ folder.
+#                 Works right after `pip install -r requirements.txt`.
+#   "tesseract" - a Tesseract program installed on the computer (pytesseract)
+#   "easyocr"   - optional deep-learning OCR (only if `pip install easyocr`)
+ENGINE_ORDER = ("bundled", "tesseract", "easyocr")
+
+# Usual install folders of Tesseract on Windows (it is often not on PATH).
+WINDOWS_TESSERACT_PATHS = (
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+)
+
+
+@lru_cache(maxsize=1)
+def bundled_available() -> bool:
+    """True if the tesserocr package and the bundled language data are present."""
+    try:
+        import tesserocr  # noqa: F401
+    except Exception:
+        return False
+    return (config.TESSDATA_DIR / "eng.traineddata").exists()
+
+
+def find_tesseract_cmd():
+    """Path of an installed tesseract program, or None."""
+    import shutil
+    found = shutil.which("tesseract")
+    if found:
+        return found
+    for candidate in WINDOWS_TESSERACT_PATHS:
+        if Path(candidate).exists():
+            return candidate
+    return None
+
+
 @lru_cache(maxsize=1)
 def tesseract_available() -> bool:
-    """True if the Tesseract program is installed and callable."""
+    """True if a Tesseract program is installed and callable."""
     try:
         import pytesseract
+        cmd = find_tesseract_cmd()
+        if cmd:
+            pytesseract.pytesseract.tesseract_cmd = cmd
         pytesseract.get_tesseract_version()
         return True
     except Exception:
@@ -143,23 +186,55 @@ def _easyocr_reader():
         return None
 
 
+def engine_status() -> dict:
+    """Which engines can be used on this computer (shown on the Settings page)."""
+    return {
+        "bundled": bundled_available(),
+        "tesseract": tesseract_available(),
+        "easyocr": _easyocr_reader() is not None if config.OCR_ENGINE == "easyocr" else None,
+    }
+
+
 def active_engine() -> str:
     """
-    The engine that will actually be used: the configured one if it works,
-    otherwise the other one, otherwise "none".
+    The engine that will actually be used: config.OCR_ENGINE if it works
+    ("auto" = first available in ENGINE_ORDER), otherwise the next working
+    one, otherwise "none".
     """
-    order = ["easyocr", "tesseract"] if config.OCR_ENGINE == "easyocr" else ["tesseract", "easyocr"]
+    preferred = config.OCR_ENGINE
+    order = list(ENGINE_ORDER)
+    if preferred in order:
+        order.remove(preferred)
+        order.insert(0, preferred)
+    checks = {"bundled": bundled_available, "tesseract": tesseract_available,
+              "easyocr": lambda: preferred == "easyocr" and _easyocr_reader() is not None}
     for engine in order:
-        if engine == "tesseract" and tesseract_available():
-            return "tesseract"
-        if engine == "easyocr" and _easyocr_reader() is not None:
-            return "easyocr"
+        if checks[engine]():
+            return engine
     return "none"
 
 
 def ocr_available() -> bool:
     """True if any OCR engine can be used."""
     return active_engine() != "none"
+
+
+def _bundled_with_confidence(image: np.ndarray, psm: int) -> tuple:
+    """Run the bundled Tesseract once; return (text, mean word confidence)."""
+    from tesserocr import PyTessBaseAPI
+    with PyTessBaseAPI(path=str(config.TESSDATA_DIR), lang="eng", psm=psm, oem=3) as api:
+        api.SetImage(Image.fromarray(image))
+        text = api.GetUTF8Text()
+        score = float(api.MeanTextConf())
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return "\n".join(lines), score
+
+
+def _ocr_bundled(image: np.ndarray) -> str:
+    """psm 6 (single block) and psm 4 (single column): keep the better result."""
+    results = [_bundled_with_confidence(image, psm) for psm in (6, 4)]
+    best_text, _score = max(results, key=lambda r: (round(r[1]), len(r[0])))
+    return best_text
 
 
 def _tesseract_with_confidence(image: np.ndarray, tess_config: str) -> tuple:
@@ -199,6 +274,8 @@ def ocr_image(image: np.ndarray) -> str:
     if engine == "none":
         raise OCRUnavailableError(INSTALL_HELP)
     cleaned = preprocess_image(image)
+    if engine == "bundled":
+        return _ocr_bundled(cleaned)
     if engine == "tesseract":
         return _ocr_tesseract(cleaned)
     return _ocr_easyocr(cleaned)

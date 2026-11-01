@@ -17,6 +17,8 @@ DATA_DIR = BASE_DIR / "data"                         # database lives here
 DATABASE_FILE = DATA_DIR / "invoices.db"             # SQLite database file
 INVOICE_FOLDER = BASE_DIR / "invoices"               # drop-in folder for batch scan
 VENDORS_FILE = BASE_DIR / "extractor" / "vendors.json"  # known vendor names
+TESSDATA_DIR = BASE_DIR / "tessdata"                 # bundled Tesseract language data
+FILES_DIR = DATA_DIR / "files"                       # copies of saved invoice files
 SAMPLES_DIR = BASE_DIR / "tests" / "samples"         # sample invoices for evaluation
 GROUND_TRUTH_FILE = BASE_DIR / "tests" / "ground_truth.csv"
 
@@ -40,8 +42,9 @@ PDF_RENDER_DPI = 300
 # Images narrower than this are upscaled before OCR.
 MIN_IMAGE_WIDTH = 1000
 
-# Which OCR engine to use: "tesseract" (default) or "easyocr".
-OCR_ENGINE = "tesseract"
+# Which OCR engine to prefer: "auto" (bundled Tesseract, then an installed
+# Tesseract, then EasyOCR), or force one of "bundled", "tesseract", "easyocr".
+OCR_ENGINE = "auto"
 
 # ------------------------------------------------------------------
 # Validation settings
