@@ -75,7 +75,9 @@ def test_spend_by_category_and_payment():
 
 def test_month_over_month():
     mom = dashboard.month_over_month(ADV, TODAY)
-    assert mom == {"this_month": 3450.0, "last_month": 400.0, "change_pct": 762.5}
+    assert mom == {"this_month": 3450.0, "last_month": 400.0, "change_pct": 762.5, "month": "October 2026",
+                   "previous": "Sep"}
+    assert dashboard.month_over_month(ADV)["month"] == "October 2026"     # latest month with data
     assert dashboard.month_over_month(ADV, "2026-08-15")["change_pct"] is None
 
 
@@ -102,7 +104,7 @@ def test_recurring_vendors():
 def test_insights_mention_budget_and_change():
     notes = dashboard.insights(ADV, {"Food & Dining": 3000}, TODAY)
     text = " ".join(notes)
-    assert "more this month" in text and "over its budget" in text and "need your review" in text
+    assert "more in October 2026" in text and "over its budget" in text and "need your review" in text
 
 
 def test_advanced_figures_build():

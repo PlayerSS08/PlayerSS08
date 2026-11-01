@@ -1,0 +1,20 @@
+# Streamlit settings for Invoice Extractor (theme + behaviour).
+# The app follows the viewer's system light/dark mode; it can also be
+# switched from the app menu (top-right ⋮ > Settings).
+
+[theme.light]
+primaryColor = "#2a78d6"
+baseRadius = "medium"
+
+[theme.dark]
+primaryColor = "#3987e5"
+baseRadius = "medium"
+
+[client]
+toolbarMode = "minimal"      # hide developer options such as "Deploy"
+
+[server]
+maxUploadSize = 50           # MB per file
+
+[browser]
+gatherUsageStats = false

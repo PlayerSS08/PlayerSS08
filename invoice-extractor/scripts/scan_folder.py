@@ -34,18 +34,23 @@ def list_invoice_files(folder: Path) -> list:
                   if p.is_file() and p.suffix.lower() in config.SUPPORTED_EXTENSIONS)
 
 
-def scan_folder(folder=None, db_path=None) -> list:
+def scan_folder(folder=None, db_path=None, on_progress=None) -> list:
     """
     Process every file in `folder` and save new ones to the database.
     Returns one dict per file: file, status (ADDED / EXISTS / REVIEW),
     vendor, invoice_number, invoice_date, total_amount, warnings.
+    `on_progress(done, total, file_name)` is called before each file
+    (the app uses it to drive a progress bar).
     """
     folder = Path(folder or config.INVOICE_FOLDER)
     folder.mkdir(parents=True, exist_ok=True)
     db.init_db(db_path)
 
     results = []
-    for path in list_invoice_files(folder):
+    files = list_invoice_files(folder)
+    for done, path in enumerate(files):
+        if on_progress:
+            on_progress(done, len(files), path.name)
         if db.hash_exists(hash_file(path), db_path):
             results.append({"file": path.name, "status": "EXISTS"})
             continue

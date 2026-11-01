@@ -147,15 +147,25 @@ def spend_by_payment_method(df: pd.DataFrame) -> pd.DataFrame:
     return result.reset_index(drop=True)
 
 
+def latest_month(df: pd.DataFrame) -> pd.Period:
+    """The most recent month that has dated invoices (or the current month)."""
+    dates = _dates(df).dropna()
+    return (dates.max() if not dates.empty else pd.Timestamp.today()).to_period("M")
+
+
 def month_over_month(df: pd.DataFrame, today=None) -> dict:
-    """Spend this calendar month vs last month, with the % change (None if no base)."""
-    today = pd.Timestamp(today or pd.Timestamp.today())
+    """
+    Spend in one month vs the month before, with the % change (None if no base).
+    The month is the one containing `today`; if `today` is not given, the
+    latest month that has invoices (so old data still gives useful numbers).
+    """
+    month = pd.Timestamp(today).to_period("M") if today else latest_month(df)
     months = _dates(df).dt.to_period("M")
-    this_month = today.to_period("M")
-    current = float(df.loc[months == this_month, "total_amount"].sum())
-    previous = float(df.loc[months == this_month - 1, "total_amount"].sum())
+    current = float(df.loc[months == month, "total_amount"].sum())
+    previous = float(df.loc[months == month - 1, "total_amount"].sum())
     change = None if previous == 0 else round(100 * (current - previous) / previous, 1)
-    return {"this_month": current, "last_month": previous, "change_pct": change}
+    return {"this_month": current, "last_month": previous, "change_pct": change,
+            "month": month.strftime("%B %Y"), "previous": (month - 1).strftime("%b")}
 
 
 def budget_status(df: pd.DataFrame, budgets: dict, month=None) -> pd.DataFrame:
@@ -224,8 +234,8 @@ def insights(df: pd.DataFrame, budgets: dict = None, today=None) -> list:
     mom = month_over_month(df, today)
     if mom["change_pct"] is not None:
         direction = "more" if mom["change_pct"] > 0 else "less"
-        notes.append(f"You spent {abs(mom['change_pct']):.0f}% {direction} this month "
-                     f"(₹ {mom['this_month']:,.0f}) than last month (₹ {mom['last_month']:,.0f}).")
+        notes.append(f"You spent {abs(mom['change_pct']):.0f}% {direction} in {mom['month']} "
+                     f"(₹ {mom['this_month']:,.0f}) than the month before (₹ {mom['last_month']:,.0f}).")
     categories = spend_by_category(df)
     if not categories.empty and categories["total_amount"].sum() > 0:
         top = categories.iloc[0]
@@ -234,7 +244,7 @@ def insights(df: pd.DataFrame, budgets: dict = None, today=None) -> list:
     vendors = spend_by_vendor(df, top=1)
     if not vendors.empty:
         notes.append(f"Top vendor: {vendors.iloc[0]['vendor']} (₹ {vendors.iloc[0]['total_amount']:,.0f}).")
-    status = budget_status(df, budgets or {}, today)
+    status = budget_status(df, budgets or {}, pd.Timestamp(today) if today else latest_month(df))
     for _, row in status[status["status"] != "ok"].iterrows():
         word = "over" if row["status"] == "over" else "close to"
         notes.append(f"⚠️ {row['category']} is {word} its budget: ₹ {row['spent']:,.0f} of ₹ {row['limit']:,.0f}.")

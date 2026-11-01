@@ -59,6 +59,11 @@ CREATE TABLE IF NOT EXISTS budgets (
     category        TEXT PRIMARY KEY,
     monthly_limit   REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+    key             TEXT PRIMARY KEY,
+    value           TEXT
+);
 """
 
 # Columns added after the first version: older databases get them via ALTER TABLE.
@@ -274,6 +279,23 @@ def set_budget(category: str, monthly_limit: Optional[float],
             conn.execute("INSERT INTO budgets (category, monthly_limit) VALUES (?, ?) "
                          "ON CONFLICT(category) DO UPDATE SET monthly_limit = excluded.monthly_limit",
                          (category, float(monthly_limit)))
+
+
+# ------------------------------------------------------------------
+# App settings (OCR engine, review threshold, ...)
+# ------------------------------------------------------------------
+def get_setting(key: str, default=None, db_path: Optional[Path] = None):
+    """A saved setting (decoded from JSON), or `default`."""
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return default if row is None else json.loads(row["value"])
+
+
+def set_setting(key: str, value, db_path: Optional[Path] = None) -> None:
+    """Save a setting (any JSON-serialisable value)."""
+    with connect(db_path) as conn:
+        conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, json.dumps(value)))
 
 
 def get_all_invoices(db_path: Optional[Path] = None) -> pd.DataFrame:

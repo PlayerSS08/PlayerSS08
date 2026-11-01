@@ -161,3 +161,11 @@ def test_clear_all(db_path):
     db.insert_invoice(make_invoice(), db_path)
     assert db.clear_all(db_path) == 1
     assert db.get_all_invoices(db_path).empty
+
+
+def test_settings_roundtrip(db_path):
+    assert db.get_setting("ocr_engine", "auto", db_path) == "auto"
+    db.set_setting("ocr_engine", "bundled", db_path)
+    db.set_setting("review_threshold", 0.7, db_path)
+    assert db.get_setting("ocr_engine", db_path=db_path) == "bundled"
+    assert db.get_setting("review_threshold", db_path=db_path) == 0.7

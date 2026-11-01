@@ -13,3 +13,6 @@ venv/
 data/
 invoices/
 *.db
+
+# Offline wheels are added to the release zip only (too big for git)
+vendor/
