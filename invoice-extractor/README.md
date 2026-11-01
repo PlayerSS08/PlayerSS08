@@ -2,11 +2,13 @@
 
 A Python application that reads invoices and bills stored as **PDF files or images** and
 automatically extracts the **date, time, vendor (source), invoice number and total amount**,
-plus GST details and a confidence score for every field. It handles digital PDFs, scanned
-PDFs and phone photos of bills (via OCR), validates GST arithmetic, flags uncertain results for
-review, stores everything in **SQLite**, lets you correct and export the records to **CSV/Excel**,
-and shows a spending dashboard by vendor and month. The whole project is **Python only**: the
-user interface is built with Streamlit, so there are no HTML, CSS or JavaScript files.
+plus GST details, line items, expense category, currency, payment method and a confidence score
+for every field. It handles digital PDFs, scanned PDFs and phone photos of bills (OCR with a
+**bundled Tesseract engine**, so nothing extra has to be installed), validates GST arithmetic,
+flags uncertain results for review, stores everything in **SQLite**, and gives you an interactive
+multi-page app: an overview with insights, editable records, a dashboard with clickable charts,
+monthly budgets with alerts, and a downloadable PDF report. The whole project is **Python only**:
+the user interface is built with Streamlit, so there are no HTML, CSS or JavaScript files.
 
 ---
 
@@ -23,37 +25,57 @@ invoices.
 
 ## 2. Features
 
-- **Upload many files at once** (PDF, JPG, JPEG, PNG) with a progress bar and a preview of each file
+**Extraction**
+- **Upload many files at once** (PDF, JPG, JPEG, PNG) with live, per-file progress
 - **Three extraction paths**: digital PDF text (`pymupdf`, with `pdfplumber` as backup) → scanned PDF
   (pages rendered at 300 DPI, then OCR) → images (OCR)
-- **Image cleaning before OCR**: grayscale, upscale, denoise, deskew, adaptive threshold;
-  Tesseract runs with `--psm 6` and `--psm 4` and the more confident result is kept
-- **Fields extracted**: invoice number, date, time, vendor, GSTIN, subtotal, CGST, SGST, IGST, total
+- **Bundled OCR**: Tesseract 5 ships inside the `tesserocr` pip package and the English model is in
+  `tessdata/`, so OCR works right after `pip install`. An installed Tesseract (found automatically,
+  even in `C:\Program Files\Tesseract-OCR` when it isn't on PATH) or EasyOCR can be used instead
+- **Image cleaning before OCR**: grayscale, upscale, denoise, deskew, adaptive threshold; two page
+  layouts (`psm 6` and `psm 4`) are tried and the more confident result is kept
+- **Fields**: invoice number, date, time, vendor, GSTIN, subtotal, CGST, SGST, IGST, total,
+  **line items** (item, qty, rate, amount), **expense category**, **currency** (₹ $ € £),
+  **payment method** (UPI, Card, Cash, Net Banking, Wallet)
 - **Indian formats**: day-first dates (`31/10/26`, `31-Oct-2026`, …), `₹ / Rs. / INR`, lakh grouping
   (`1,23,456.78`), `500/-`, common OCR mistakes (`O→0`, `l→1`, `S→5` inside numbers)
-- **Confidence score per field** plus an overall weighted score; low-confidence fields get a ⚠️
-- **Validation**: GST arithmetic check (±₹1), GSTIN structure + state code, sanity checks
-  (total > 0 and < ₹1 crore, date not in the future), automatic **needs-review** flag
-- **Editable results**: fix any field before saving; corrected fields are marked as verified
-- **Duplicate detection**: the same file (SHA-256 hash) is never imported twice; same
-  vendor + invoice number gives a warning; the dashboard lists vendor + number + total matches
-- **Records page**: search, filter by date / vendor / amount / needs-review, edit, delete,
-  download **CSV** or **Excel**
-- **Dashboard**: total invoices, total spend, average invoice, number needing review, spend by
-  vendor (top 10), spend by month, GST breakdown, possible duplicates
-- **Batch scan** of the `invoices/` folder (from the app or the command line)
-- **Never crashes on a bad file**: unreadable files are saved with `needs_review` and a warning;
-  if no OCR engine is installed the app says so clearly and still processes digital PDFs
+- **Confidence score per field** plus a weighted overall score; low-confidence fields get a ⚠️
+
+**Checking and storage**
+- **Validation**: GST arithmetic (±₹1), GSTIN structure + state code, sanity checks (total > 0 and
+  < ₹1 crore, date not in the future) and an automatic **needs-review** flag
+- **Duplicate detection**: the same file (SHA-256) is never imported twice; same vendor + invoice
+  number gives a warning; the dashboard lists vendor + number + total matches
+- **SQLite** database with automatic upgrade of older databases; a copy of every original file is
+  kept so you can look at it again later
+
+**Interactive app** (7 pages, light and dark mode)
+- **Home**: month-on-month spend, insights in plain English, budget alerts, quick actions,
+  recent invoices, one-click sample data
+- **Upload & Extract**: confidence badges, editable fields, category/currency/payment pickers, line
+  items and raw text tabs, "save all ready" and filter by status
+- **Records**: search, period, category, vendor and amount filters; click a row to see the original
+  file and edit it; delete with a confirmation dialog; bulk edit; CSV and Excel export
+- **Dashboard**: 1M/3M/6M/1Y/All switch, **click a category bar to filter every chart**, spend by
+  category, month, vendor, payment method, cumulative trend, GST donut, **unusual amounts**,
+  **recurring vendors**, possible duplicates, and a **monthly PDF report**
+- **Budgets**: monthly limit per category with progress bars, warnings at 80% and alerts when over
+- **Batch Scan**: process the whole `invoices/` folder with a progress bar
+- **Settings**: OCR engine status and choice, review threshold, backup, sample data, reset
+- **Never crashes on a bad file**: unreadable files are saved with `needs_review` and a warning
 
 ## 3. Screenshots
 
 | Page | Screenshot |
 |---|---|
-| 1. Upload and Extract | ![Upload and Extract](docs/screenshots/1_upload_and_extract.png) |
-| 1. Duplicate + needs-review messages | ![Duplicate and review](docs/screenshots/1c_duplicate_and_review.png) |
-| 2. Invoice Records | ![Invoice Records](docs/screenshots/2_invoice_records.png) |
-| 3. Dashboard | ![Dashboard](docs/screenshots/3_dashboard.png) |
-| 4. Batch Scan | ![Batch Scan](docs/screenshots/4_batch_scan.png) |
+| Home | ![Home](docs/screenshots/1_home.png) |
+| Upload & Extract | ![Upload and Extract](docs/screenshots/2_upload_and_extract.png) |
+| Records | ![Records](docs/screenshots/3_records.png) |
+| Dashboard | ![Dashboard](docs/screenshots/4_dashboard.png) |
+| Budgets | ![Budgets](docs/screenshots/5_budgets.png) |
+| Batch Scan | ![Batch Scan](docs/screenshots/6_batch_scan.png) |
+| Settings | ![Settings](docs/screenshots/7_settings.png) |
+| Dark mode | ![Dashboard in dark mode](docs/screenshots/8_dashboard_dark.png) |
 
 ## 4. Architecture
 
@@ -65,8 +87,9 @@ invoices.
                    │              └───────────────────────────┘
                    ▼  raw text
             ┌──────────────┐   normalise text, one function per field
-            │  parser.py   │──▶ fields.py  (number, date, time, vendor, total, GST)
-            └──────────────┘
+            │  parser.py   │──▶ fields.py  (number, date, time, vendor, total, GST,
+            └──────────────┘               currency, payment, line items)
+                   │                   categories.py (expense category)
                    │  InvoiceData (models.py)
                    ▼
             ┌──────────────┐   GST check, GSTIN check, sanity checks,
@@ -74,36 +97,44 @@ invoices.
             └──────────────┘
                    │
                    ▼
-   app.py (Streamlit) ──▶ storage/db.py (SQLite) ──▶ storage/export.py (CSV / Excel)
-                                   │
-                                   └──▶ analytics/dashboard.py (Plotly charts)
+   app.py + ui/ (Streamlit pages) ──▶ storage/db.py (SQLite: invoices, budgets, settings)
+                                          │          └──▶ storage/export.py (CSV / Excel)
+                                          └──▶ analytics/dashboard.py (insights, Plotly charts)
+                                               analytics/report.py   (monthly PDF)
 ```
 
 ```
 invoice-extractor/
-├── app.py                      # Streamlit UI (entry point)
+├── app.py                      # Streamlit entry point: page setup + navigation
+├── run.py / install.py         # one-command launch / install helpers
 ├── config.py                   # constants: paths, thresholds, OCR engine
+├── ui/                         # one script per page + shared components
+│   ├── home.py  upload.py  records.py  dashboard.py  budgets.py  batch.py  settings.py
+│   └── components.py           # badges, previews, formatting, invoice detail
 ├── extractor/
 │   ├── text_extraction.py      # get_text(file) -> (text, method), file hashing
-│   ├── ocr.py                  # preprocess_image(), ocr_image(), scanned PDFs
+│   ├── ocr.py                  # preprocess_image(), ocr_image(), engines, scanned PDFs
 │   ├── parser.py               # parse_invoice(text) -> InvoiceData, process_file()
-│   ├── fields.py               # one function per field (date, time, amount, vendor, ...)
+│   ├── fields.py               # one function per field (date, time, amount, vendor, items, ...)
+│   ├── categories.py           # expense category tagging (+ categories.json)
 │   ├── validators.py           # GST check, sanity checks, confidence scoring
 │   ├── models.py               # InvoiceData dataclass
 │   └── vendors.json            # known vendor names (easy to extend)
 ├── storage/
-│   ├── db.py                   # connect, init_db, insert, update, delete, query, filter
+│   ├── db.py                   # SQLite: invoices, budgets, settings; filters; migrations
 │   └── export.py               # to_csv(), to_excel()
 ├── analytics/
-│   └── dashboard.py            # spend_by_vendor(), spend_by_month() + Plotly figures
+│   ├── dashboard.py            # spend by vendor/month/category, budgets, anomalies, insights
+│   └── report.py               # monthly PDF summary
 ├── scripts/
 │   ├── scan_folder.py          # batch CLI (descendant of the old Scanner.py)
 │   └── evaluate.py             # accuracy report against tests/ground_truth.csv
-├── tests/                      # pytest suite (193 tests)
+├── tessdata/eng.traineddata    # bundled English model for Tesseract
+├── tests/                      # pytest suite (250 tests)
 │   ├── samples/                # 18 sample invoices + make_samples.py
 │   └── ground_truth.csv        # expected values for each sample
-├── docs/screenshots/           # screenshots used in this README
-├── data/                       # invoices.db is created here (gitignored)
+├── assets/logo.png  .streamlit/config.toml  docs/screenshots/
+├── data/                       # invoices.db + copies of saved files (gitignored)
 ├── invoices/                   # drop-in folder for batch scan (gitignored)
 └── requirements.txt
 ```
@@ -126,44 +157,45 @@ Its logic was **moved and extended, not deleted**:
 
 ## 5. Installation
 
-Requires **Python 3.10+** (tested on 3.13) on Windows, macOS or Linux.
+Requires **Python 3.10+** (tested on 3.13) on Windows, macOS or Linux. On Windows tick
+**"Add Python to PATH"** when installing Python.
 
-```bash
-cd invoice-extractor
-```
+Open a terminal in the `invoice-extractor` folder, then (recommended) create and activate a
+virtual environment:
 
 ```bash
 python -m venv .venv
 ```
 
-Activate it: `.venv\Scripts\activate` (Windows) or `source .venv/bin/activate` (macOS/Linux), then:
+Activate it with `.venv\Scripts\activate` (Windows) or `source .venv/bin/activate` (macOS/Linux).
+Then install everything with one command:
 
 ```bash
-pip install -r requirements.txt
+python install.py
 ```
 
-### Install Tesseract (needed for images and scanned PDFs)
+That's all — **OCR is included**. `install.py` installs `requirements.txt` (which contains
+`tesserocr`, a package that ships the Tesseract 5 engine for Windows, macOS and Linux), uses the
+offline wheels in `vendor/wheels/` if they are present (they are in the release zip), and checks
+that OCR works. `pip install -r requirements.txt` does the same without the check.
 
-`pytesseract` is only a Python wrapper; the Tesseract program itself must be installed:
+**Optional — a full Tesseract program** (only if you prefer it over the bundled engine; choose it
+in *Settings*):
 
 | OS | Command |
 |---|---|
-| Windows | Download the installer from [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki) and tick "Add to PATH" (or add `C:\Program Files\Tesseract-OCR` to PATH) |
+| Windows | Installer from [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki) (found automatically in `C:\Program Files\Tesseract-OCR`) |
 | macOS | `brew install tesseract` |
 | Linux (Debian/Ubuntu) | `sudo apt install tesseract-ocr` |
-
-Check it with `tesseract --version`. Without Tesseract the app still works for **digital PDFs** and
-shows a clear message for images. Optional alternative: `pip install easyocr` and set
-`OCR_ENGINE = "easyocr"` in `config.py`.
 
 ## 6. How to run
 
 ```bash
-streamlit run app.py
+python run.py
 ```
 
-The browser opens at <http://localhost:8501>. Use the sidebar to switch between
-**Upload and Extract**, **Invoice Records**, **Dashboard** and **Batch Scan**.
+(or `streamlit run app.py`). The browser opens at <http://localhost:8501>. On the Home page press
+**Load sample invoices** to explore every feature with the 18 samples.
 
 Batch scan from the command line (put files in `invoices/` first):
 
@@ -191,7 +223,7 @@ python tests/samples/make_samples.py
 
 ## 7. Accuracy results
 
-Output of `python scripts/evaluate.py` on the 18 files in `tests/samples/`:
+Output of `python scripts/evaluate.py` on the 18 files in `tests/samples/` (bundled Tesseract 5.5):
 
 | Field | Correct / Total | Accuracy |
 |---|---|---|
@@ -221,9 +253,12 @@ documents. **Before the final presentation, add your own real invoices** to `tes
 - **Rule-based parsing** depends on labels such as "Grand Total"; unusual layouts fall back to
   guesses (flagged for review). A layout-aware ML model (LayoutLM, Donut) could learn layouts.
 - Marketplace invoices list the **seller** (e.g. "Sold By") as the vendor, not the marketplace.
-- Totals from tables without a summary line, and multi-currency invoices, are not handled.
-- Future: line-item extraction, category tagging (food, travel, utilities), user login,
-  monthly PDF summaries.
+- **Line items** are found with layout rules; complex multi-column tables (e.g. Amazon's tax
+  table) may be skipped. Categories come from keyword lists in `categories.json`.
+- Totals from tables without a summary line are guessed (and flagged). The currency is detected,
+  but amounts are not converted, so dashboard totals assume everything is in ₹.
+- Future: user login, multi-language OCR, learning categories from the user's corrections,
+  e-mail import of invoices.
 
 ## 9. Team members and task allocation
 
@@ -232,9 +267,9 @@ documents. **Before the final presentation, add your own real invoices** to `tes
 | Member | Responsibility | Main files |
 |---|---|---|
 | Person 1 | PDF text extraction, batch script, file hashing | `text_extraction.py`, `scripts/scan_folder.py` |
-| Person 2 | OCR and image preprocessing | `ocr.py` |
-| Person 3 | Field parsing, validators, tests, accuracy evaluation | `fields.py`, `parser.py`, `validators.py`, `tests/`, `evaluate.py` |
-| Person 4 | Streamlit UI, database, export, dashboard | `app.py`, `db.py`, `export.py`, `dashboard.py` |
+| Person 2 | OCR, image preprocessing, bundled engine | `ocr.py`, `tessdata/` |
+| Person 3 | Field parsing, categories, validators, tests, accuracy evaluation | `fields.py`, `categories.py`, `parser.py`, `validators.py`, `tests/`, `evaluate.py` |
+| Person 4 | Streamlit UI, database, export, dashboard, budgets, report | `app.py`, `ui/`, `db.py`, `export.py`, `dashboard.py`, `report.py` |
 
 ## 10. Libraries used
 
@@ -242,11 +277,12 @@ documents. **Before the final presentation, add your own real invoices** to `tes
 |---|---|
 | PDF text (digital PDFs) | `pymupdf`, `pdfplumber` |
 | PDF pages to images (scanned PDFs) | `pymupdf` (`page.get_pixmap`), no Poppler needed |
-| OCR | `pytesseract` (+ the Tesseract program); optional `easyocr` |
+| OCR | `tesserocr` (bundled Tesseract 5), `pytesseract` (installed Tesseract); optional `easyocr` |
 | Image cleaning | `opencv-python-headless`, `Pillow`, `numpy` |
 | Dates | `python-dateutil` + our own regex list |
 | Database | `sqlite3` (standard library) |
 | Tables and export | `pandas`, `openpyxl` |
 | User interface | `streamlit` |
 | Charts | `plotly` |
+| PDF report | `pymupdf` |
 | Tests | `pytest` |
