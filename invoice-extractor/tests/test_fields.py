@@ -316,3 +316,55 @@ def test_tax_label_inside_item_row_is_ignored():
             "TOTAL: ₹152.55 ₹1,000.00")
     assert fields.extract_igst(text) == (None, 0.0)
     assert fields.extract_igst(text + "\nIGST @ 18% 152.55")[0] == 152.55
+
+
+# ----------------------------------------------------------------------
+# currency, payment method, line items (advanced fields)
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize("text, expected", [
+    ("Total Rs. 500", ("INR", 0.9)),
+    ("Grand Total $ 25.40\nTax $2.00", ("USD", 0.9)),
+    ("Amount: € 99,00", ("EUR", 0.9)),
+    ("Total GBP 12.50", ("GBP", 0.9)),
+    ("Total 500", ("INR", 0.5)),          # no symbol -> default, low confidence
+])
+def test_currency(text, expected):
+    assert fields.extract_currency(text) == expected
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("Paid via UPI", "UPI"),
+    ("Payment: PhonePe", "UPI"),
+    ("Paid by Credit Card **** 1234", "Card"),
+    ("Cash  Rs 500.00\nChange Rs 20", "Cash"),
+    ("Tax Invoice/Bill of Supply/Cash Memo", None),   # not a payment
+    ("Cashback credited", None),
+    ("Paid through Net Banking", "Net Banking"),
+])
+def test_payment_method(text, expected):
+    assert fields.extract_payment_method(text)[0] == expected
+
+
+def test_line_items_from_restaurant_bill():
+    text = """HOTEL ANNAPOORNA
+Bill No: 1187
+Date: 30/09/2026
+Idli (2)          2    60.00
+Masala Dosa       1    90.00
+PVC Pipe 1 inch   10   45.00   450.00
+Sub Total             600.00
+CGST 2.5%               5.00
+Total Rs.             610.00"""
+    items, conf = fields.extract_line_items(text)
+    assert [i["description"] for i in items] == ["Idli (2)", "Masala Dosa", "PVC Pipe 1 inch"]
+    assert items[0]["quantity"] == 2 and items[0]["rate"] == 30.0
+    assert items[2] == {"description": "PVC Pipe 1 inch", "quantity": 10.0, "rate": 45.0, "amount": 450.0}
+    assert conf == 0.6
+
+
+@pytest.mark.parametrize("line", [
+    "Pay by: 15 October 2026", "Plot 12, Industrial Area, Bengaluru, 560068",
+    "Delivery partner fee ₹ 35.00", "Grand Total 1,180.00", "Account ID 9876501234",
+])
+def test_line_items_skip_non_items(line):
+    assert fields.extract_line_items(line) == ([], 0.0)

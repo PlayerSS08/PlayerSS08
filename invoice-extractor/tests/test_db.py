@@ -116,3 +116,48 @@ def test_filter_invoices(db_path):
     assert len(db.filter_invoices(df, start_date="2026-10-02")) == 0
     assert len(db.filter_invoices(df, start_date="2026-09-01", end_date="2026-10-01")) == 2
     assert len(db.filter_invoices(df, review_only=True)) == 0
+
+
+def test_new_fields_are_stored(db_path):
+    inv = make_invoice()
+    inv.category, inv.payment_method = "Shopping", "UPI"
+    inv.line_items = [{"description": "Mouse", "quantity": 1.0, "rate": 600.0, "amount": 600.0}]
+    db.insert_invoice(inv, db_path, file_path="data/files/x.pdf")
+    record = db.get_invoice(1, db_path)
+    assert record["category"] == "Shopping" and record["payment_method"] == "UPI"
+    assert record["line_items"][0]["description"] == "Mouse"
+    assert record["file_path"] == "data/files/x.pdf"
+    assert db.get_invoice(99, db_path) is None
+    assert len(db.filter_invoices(db.get_all_invoices(db_path), categories=["Shopping"])) == 1
+
+
+def test_old_database_is_upgraded(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, file_hash TEXT NOT NULL "
+                 "UNIQUE, source_file TEXT NOT NULL, invoice_number TEXT, invoice_date TEXT, "
+                 "invoice_time TEXT, vendor TEXT, gstin TEXT, subtotal REAL, cgst REAL, sgst REAL, "
+                 "igst REAL, total_amount REAL, currency TEXT DEFAULT 'INR', extraction_method TEXT, "
+                 "confidence_json TEXT, needs_review INTEGER DEFAULT 0, warnings TEXT, raw_text TEXT, "
+                 "scanned_at TEXT NOT NULL)")
+    conn.commit()
+    conn.close()
+    db.init_db(path)
+    assert db.insert_invoice(make_invoice(), path)
+    assert "category" in db.get_all_invoices(path).columns
+
+
+def test_budgets(db_path):
+    db.set_budget("Food & Dining", 5000, db_path)
+    db.set_budget("Fuel", 3000, db_path)
+    db.set_budget("Fuel", 3500, db_path)
+    assert db.get_budgets(db_path) == {"Food & Dining": 5000.0, "Fuel": 3500.0}
+    db.set_budget("Fuel", 0, db_path)
+    assert db.get_budgets(db_path) == {"Food & Dining": 5000.0}
+
+
+def test_clear_all(db_path):
+    db.insert_invoice(make_invoice(), db_path)
+    assert db.clear_all(db_path) == 1
+    assert db.get_all_invoices(db_path).empty

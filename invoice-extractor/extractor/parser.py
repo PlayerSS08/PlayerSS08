@@ -9,7 +9,7 @@ from datetime import date
 from typing import Optional
 
 import config
-from extractor import fields, validators
+from extractor import categories, fields, validators
 from extractor.models import InvoiceData
 
 
@@ -32,6 +32,10 @@ def parse_invoice(text: str, source_file: str = "", file_hash: str = "",
     invoice.cgst, _ = fields.extract_cgst(clean)
     invoice.sgst, _ = fields.extract_sgst(clean)
     invoice.igst, _ = fields.extract_igst(clean)
+    invoice.currency, invoice.confidence["currency"] = fields.extract_currency(clean)
+    invoice.payment_method, _ = fields.extract_payment_method(clean)
+    invoice.line_items, _ = fields.extract_line_items(clean)
+    invoice.category, invoice.confidence["category"] = categories.categorize(invoice.vendor, clean)
 
     if invoice.total_amount is not None and \
             invoice.confidence["total_amount"] == fields.TOTAL_GUESS_CONFIDENCE:
@@ -74,7 +78,8 @@ def process_file(path, display_name: Optional[str] = None,
 
 # Fields a user can correct on the "Upload and Extract" page.
 EDITABLE_FIELDS = ("invoice_number", "invoice_date", "invoice_time", "vendor", "gstin",
-                   "subtotal", "cgst", "sgst", "igst", "total_amount")
+                   "subtotal", "cgst", "sgst", "igst", "total_amount",
+                   "currency", "category", "payment_method")
 AMOUNT_FIELDS = ("subtotal", "cgst", "sgst", "igst", "total_amount")
 # Warnings produced by the validators / guesses; recomputed after an edit.
 DERIVED_WARNINGS = ("GST arithmetic mismatch", "invalid GSTIN", "total amount out of range",
@@ -105,7 +110,7 @@ def convert_field(name: str, value):
             if iso is None:
                 raise ValueError(f"'{text}' is not a valid date (use YYYY-MM-DD)") from None
             return iso
-    if name == "gstin":
+    if name in ("gstin", "currency"):
         return text.upper()
     return text
 

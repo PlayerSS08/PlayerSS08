@@ -617,3 +617,104 @@ def extract_vendor(text: str, known_vendors=None) -> tuple:
     if name:
         return name, 0.4
     return None, 0.0
+
+
+# ======================================================================
+# 9. CURRENCY
+# ======================================================================
+CURRENCY_PATTERNS = {
+    "INR": r"₹",                                  # Rs. / INR are normalised to ₹
+    "USD": r"US\$|\$|\bUSD\b",
+    "EUR": r"€|\bEUR\b",
+    "GBP": r"£|\bGBP\b",
+}
+
+
+def extract_currency(text: str) -> tuple:
+    """
+    Currency of the invoice: the most frequently used symbol/code.
+    Indian invoices often print no symbol at all, so the default is INR
+    with low confidence.
+    """
+    text = normalize_text(text)
+    counts = {code: len(re.findall(pattern, text)) for code, pattern in CURRENCY_PATTERNS.items()}
+    best = max(counts, key=counts.get)
+    if counts[best] == 0:
+        return config.DEFAULT_CURRENCY, 0.5
+    return best, 0.9
+
+
+# ======================================================================
+# 10. PAYMENT METHOD
+# ======================================================================
+PAYMENT_PATTERNS = [
+    ("UPI", r"\bUPI\b|\bG\s?Pay\b|Google\s*Pay|PhonePe|Paytm|BHIM"),
+    ("Card", r"credit\s*card|debit\s*card|\bvisa\b|master\s*card|\brupay\b|\bcard\b"),
+    ("Net Banking", r"net\s*banking|\bNEFT\b|\bIMPS\b|\bRTGS\b"),
+    ("Wallet", r"\bwallet\b|amazon\s*pay"),
+    ("Cash", r"\bcash\b(?!\s*memo)(?!back)"),
+]
+
+
+def extract_payment_method(text: str) -> tuple:
+    """How the bill was paid (UPI, Card, Net Banking, Wallet, Cash) - earliest mention wins."""
+    text = normalize_text(text)
+    best = None
+    for name, pattern in PAYMENT_PATTERNS:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match and (best is None or match.start() < best[1]):
+            best = (name, match.start())
+    return (best[0], 0.7) if best else (None, 0.0)
+
+
+# ======================================================================
+# 11. LINE ITEMS
+# ======================================================================
+# Lines with these words are totals, taxes or details - not purchased items.
+_NOT_ITEM_RE = re.compile(
+    r"\b(?:total|sub\s*-?\s*total|subtotal|tax(?:es|able)?|gst|cgst|sgst|igst|utgst|cess|"
+    r"discount|savings?|round(?:ing|ed)?|amount|payable|paid|balance|due|change|cash|"
+    r"invoice|bill|receipt|order|date|time|gstin|pan|phone|mob|tel|fee|charges?|delivery|"
+    r"units?|rate\s*:|volume|account|id|no\.?|qty|quantity|hsn|sac|table|tip)\b",
+    re.IGNORECASE,
+)
+_NUM = r"(?:[x×]\s*)?-?(?:[₹$€£]\s*)?-?\d[\d,]*(?:\.\d+)?"
+_ITEM_LINE_RE = re.compile(
+    r"^(?:\d{1,3}[.)]?\s+)?"                       # optional serial number "1."
+    r"(?P<desc>[^\d₹$€£:]*[A-Za-z][^₹$€£:]*?)\s+"
+    r"(?P<nums>" + _NUM + r"(?:\s+" + _NUM + r"){0,5})\s*$"
+)
+
+
+def _parse_item_line(line: str) -> Optional[dict]:
+    """Turn one table row into {description, quantity, rate, amount} or None."""
+    match = _ITEM_LINE_RE.match(line.strip())
+    if not match:
+        return None
+    description = match.group("desc").strip(" -x×")
+    if _NOT_ITEM_RE.search(description) or sum(ch.isalpha() for ch in description) < 3:
+        return None
+    if looks_like_address(description) or find_date_candidates(line, date.max.replace(year=9998)):
+        return None
+    numbers = [parse_amount(n) for n in re.findall(r"(?<!-)(?<!-₹)\d[\d,]*(?:\.\d+)?",
+                                                   match.group("nums"))]
+    numbers = [n for n in numbers if n is not None]
+    if not numbers or numbers[-1] <= 0 or numbers[-1] >= config.MAX_REASONABLE_TOTAL:
+        return None
+    amount, quantity, rate = numbers[-1], 1.0, numbers[-1]
+    if len(numbers) >= 3 and abs(numbers[-3] * numbers[-2] - amount) <= 1:
+        quantity, rate = numbers[-3], numbers[-2]
+    elif len(numbers) >= 2 and numbers[-2] < 1000 and float(numbers[-2]).is_integer() and numbers[-2] > 0:
+        quantity, rate = numbers[-2], round(amount / numbers[-2], 2)
+    return {"description": description, "quantity": quantity, "rate": rate, "amount": amount}
+
+
+def extract_line_items(text: str) -> tuple:
+    """
+    Purchased items as a list of dicts (description, quantity, rate, amount).
+    Rule: a line that starts with words and ends with 1-4 numbers, and is not
+    a total / tax / detail line. Confidence 0.6 when at least one item found.
+    """
+    items = [item for line in _lines(normalize_text(text))
+             if (item := _parse_item_line(line)) is not None]
+    return (items, 0.6) if items else ([], 0.0)

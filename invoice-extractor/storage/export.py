@@ -14,8 +14,8 @@ import pandas as pd
 # Columns exported by default, in a readable order (raw OCR text is left
 # out because it makes spreadsheets huge).
 EXPORT_COLUMNS = [
-    "id", "invoice_date", "invoice_time", "vendor", "invoice_number",
-    "total_amount", "currency", "subtotal", "cgst", "sgst", "igst", "gstin",
+    "id", "invoice_date", "invoice_time", "vendor", "category", "invoice_number",
+    "total_amount", "currency", "payment_method", "subtotal", "cgst", "sgst", "igst", "gstin",
     "needs_review", "warnings", "extraction_method", "source_file", "scanned_at",
 ]
 

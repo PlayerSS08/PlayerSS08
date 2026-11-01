@@ -50,11 +50,13 @@ def scan_folder(folder=None, db_path=None) -> list:
             results.append({"file": path.name, "status": "EXISTS"})
             continue
         invoice = process_file(path)
-        db.insert_invoice(invoice, db_path)
+        stored = db.save_original_file(invoice.file_hash, path.name, path.read_bytes())
+        db.insert_invoice(invoice, db_path, file_path=stored)
         results.append({
             "file": path.name,
             "status": "REVIEW" if invoice.needs_review else "ADDED",
             "vendor": invoice.vendor,
+            "category": invoice.category,
             "invoice_number": invoice.invoice_number,
             "invoice_date": invoice.invoice_date,
             "total_amount": invoice.total_amount,

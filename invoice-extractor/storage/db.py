@@ -46,17 +46,32 @@ CREATE TABLE IF NOT EXISTS invoices (
     needs_review    INTEGER DEFAULT 0,
     warnings        TEXT,
     raw_text        TEXT,
-    scanned_at      TEXT NOT NULL              -- when the file was processed
+    scanned_at      TEXT NOT NULL,             -- when the file was processed
+    category        TEXT,                      -- expense category
+    payment_method  TEXT,                      -- UPI / Card / Cash ...
+    line_items_json TEXT,                      -- JSON list of purchased items
+    file_path       TEXT                       -- copy of the original file (data/files)
 );
 CREATE INDEX IF NOT EXISTS idx_vendor ON invoices(vendor);
 CREATE INDEX IF NOT EXISTS idx_date   ON invoices(invoice_date);
+
+CREATE TABLE IF NOT EXISTS budgets (
+    category        TEXT PRIMARY KEY,
+    monthly_limit   REAL NOT NULL
+);
 """
+
+# Columns added after the first version: older databases get them via ALTER TABLE.
+ADDED_COLUMNS = {
+    "category": "TEXT", "payment_method": "TEXT",
+    "line_items_json": "TEXT", "file_path": "TEXT",
+}
 
 # Columns a user is allowed to change from the UI.
 EDITABLE_COLUMNS = {
     "invoice_number", "invoice_date", "invoice_time", "vendor", "gstin",
     "subtotal", "cgst", "sgst", "igst", "total_amount", "currency",
-    "needs_review", "warnings",
+    "needs_review", "warnings", "category", "payment_method",
 }
 
 # Separator used to store the list of warnings as one text column.
@@ -87,8 +102,13 @@ def connect(db_path: Optional[Path] = None):
 
 
 def init_db(db_path: Optional[Path] = None) -> None:
-    """Create the invoices table and indexes if they do not exist."""
+    """Create the tables and indexes if they do not exist, and upgrade old databases."""
     with connect(db_path) as conn:
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(invoices)")}
+        if existing:                                   # upgrade before indexes etc.
+            for column, kind in ADDED_COLUMNS.items():
+                if column not in existing:
+                    conn.execute(f"ALTER TABLE invoices ADD COLUMN {column} {kind}")
         conn.executescript(SCHEMA)
 
 
@@ -129,7 +149,8 @@ def _now() -> str:
     return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def insert_invoice(invoice: InvoiceData, db_path: Optional[Path] = None) -> bool:
+def insert_invoice(invoice: InvoiceData, db_path: Optional[Path] = None,
+                   file_path: Optional[str] = None) -> bool:
     """
     Save an invoice. Returns False if the same file (hash) already exists.
 
@@ -150,8 +171,9 @@ def insert_invoice(invoice: InvoiceData, db_path: Optional[Path] = None) -> bool
                 file_hash, source_file, invoice_number, invoice_date,
                 invoice_time, vendor, gstin, subtotal, cgst, sgst, igst,
                 total_amount, currency, extraction_method, confidence_json,
-                needs_review, warnings, raw_text, scanned_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                needs_review, warnings, raw_text, scanned_at,
+                category, payment_method, line_items_json, file_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 invoice.file_hash, invoice.source_file, invoice.invoice_number,
@@ -161,7 +183,8 @@ def insert_invoice(invoice: InvoiceData, db_path: Optional[Path] = None) -> bool
                 invoice.extraction_method, json.dumps(invoice.confidence),
                 int(invoice.needs_review),
                 WARNING_SEPARATOR.join(invoice.warnings), invoice.raw_text,
-                _now(),
+                _now(), invoice.category, invoice.payment_method,
+                json.dumps(invoice.line_items), file_path,
             ),
         )
         return cursor.rowcount == 1
@@ -201,6 +224,58 @@ def delete_invoice(invoice_id: int, db_path: Optional[Path] = None) -> bool:
 # ------------------------------------------------------------------
 # Queries
 # ------------------------------------------------------------------
+def save_original_file(file_hash: str, name: str, data: bytes) -> str:
+    """
+    Keep a copy of the uploaded file in data/files/<hash><ext> so it can be
+    viewed again later. Returns the path as text.
+    """
+    config.FILES_DIR.mkdir(parents=True, exist_ok=True)
+    target = config.FILES_DIR / f"{file_hash}{Path(name).suffix.lower()}"
+    if not target.exists():
+        target.write_bytes(data)
+    return str(target)
+
+
+def get_invoice(invoice_id: int, db_path: Optional[Path] = None) -> Optional[dict]:
+    """One row as a dict (line items and confidence decoded), or None."""
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+    if row is None:
+        return None
+    record = dict(row)
+    record["line_items"] = json.loads(record.get("line_items_json") or "[]")
+    record["confidence"] = json.loads(record.get("confidence_json") or "{}")
+    return record
+
+
+def clear_all(db_path: Optional[Path] = None) -> int:
+    """Delete every invoice (used by Settings > reset). Returns rows removed."""
+    with connect(db_path) as conn:
+        return conn.execute("DELETE FROM invoices").rowcount
+
+
+# ------------------------------------------------------------------
+# Budgets
+# ------------------------------------------------------------------
+def get_budgets(db_path: Optional[Path] = None) -> dict:
+    """{category: monthly_limit}"""
+    with connect(db_path) as conn:
+        return {row["category"]: row["monthly_limit"]
+                for row in conn.execute("SELECT * FROM budgets ORDER BY category")}
+
+
+def set_budget(category: str, monthly_limit: Optional[float],
+               db_path: Optional[Path] = None) -> None:
+    """Create/update a monthly budget; a limit of None or 0 removes it."""
+    with connect(db_path) as conn:
+        if not monthly_limit:
+            conn.execute("DELETE FROM budgets WHERE category = ?", (category,))
+        else:
+            conn.execute("INSERT INTO budgets (category, monthly_limit) VALUES (?, ?) "
+                         "ON CONFLICT(category) DO UPDATE SET monthly_limit = excluded.monthly_limit",
+                         (category, float(monthly_limit)))
+
+
 def get_all_invoices(db_path: Optional[Path] = None) -> pd.DataFrame:
     """Return every saved invoice as a DataFrame (newest first)."""
     with connect(db_path) as conn:
@@ -229,7 +304,7 @@ def find_possible_duplicates(db_path: Optional[Path] = None) -> pd.DataFrame:
 
 def filter_invoices(df: pd.DataFrame, search: str = "", start_date=None, end_date=None,
                     vendors=None, min_amount=None, max_amount=None,
-                    review_only: bool = False) -> pd.DataFrame:
+                    review_only: bool = False, categories=None) -> pd.DataFrame:
     """
     Filter a DataFrame from get_all_invoices() (pure: no database access).
     `search` matches vendor or invoice number (case-insensitive).
@@ -252,4 +327,6 @@ def filter_invoices(df: pd.DataFrame, search: str = "", start_date=None, end_dat
         out = out[out["total_amount"].fillna(0) <= max_amount]
     if review_only:
         out = out[out["needs_review"]]
+    if categories:
+        out = out[out["category"].isin(categories)]
     return out

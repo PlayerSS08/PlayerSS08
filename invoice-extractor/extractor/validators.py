@@ -23,6 +23,8 @@ GSTIN_STRUCTURE_RE = re.compile(r"^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$")
 
 # Fields that every invoice should have; missing ones need review.
 CORE_FIELDS = ("total_amount", "invoice_date", "vendor", "invoice_number")
+# Helpful extras that never trigger a review on their own.
+INFO_FIELDS = ("overall", "currency", "category")
 
 
 # ----------------------------------------------------------------------
@@ -70,16 +72,16 @@ def overall_confidence(confidence: dict) -> float:
     return round(score / sum(weights.values()), 3)
 
 
-def low_confidence_fields(invoice: InvoiceData,
-                          threshold: float = config.REVIEW_THRESHOLD) -> list:
+def low_confidence_fields(invoice: InvoiceData, threshold: Optional[float] = None) -> list:
     """
     Names of fields whose confidence is under the threshold.
     Core fields count even when missing; optional ones (time, GSTIN) only
     when they were actually found.
     """
+    threshold = config.REVIEW_THRESHOLD if threshold is None else threshold
     low = []
     for name, score in invoice.confidence.items():
-        if name == "overall":
+        if name in INFO_FIELDS:
             continue
         found = getattr(invoice, name, None) is not None
         if (name in CORE_FIELDS or found) and score < threshold:

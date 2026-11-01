@@ -28,6 +28,9 @@ class InvoiceData:
     igst: Optional[float] = None
     total_amount: Optional[float] = None
     currency: str = "INR"
+    category: Optional[str] = None       # e.g. "Food & Dining" (categories.json)
+    payment_method: Optional[str] = None # "UPI" | "Card" | "Cash" | ...
+    line_items: list = field(default_factory=list)  # [{description, quantity, rate, amount}]
     confidence: dict = field(default_factory=dict)  # {"invoice_date": 0.9, ...}
     needs_review: bool = False
     warnings: list = field(default_factory=list)
