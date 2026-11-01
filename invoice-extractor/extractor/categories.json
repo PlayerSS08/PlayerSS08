@@ -1,0 +1,43 @@
+{
+  "_comment": "Expense categories. 'vendors' = known vendor names (matched first), 'keywords' = words searched in the invoice text. Edit freely.",
+  "Food & Dining": {
+    "vendors": ["Swiggy", "Zomato", "Domino's", "McDonald's", "KFC", "Starbucks"],
+    "keywords": ["restaurant", "hotel", "cafe", "dosa", "idli", "biryani", "coffee", "pizza", "burger", "meal", "food", "dine", "table", "kitchen", "bakery", "sweets"]
+  },
+  "Groceries": {
+    "vendors": ["BigBasket", "Zepto", "Blinkit", "DMart", "Reliance Smart"],
+    "keywords": ["grocery", "supermarket", "kirana", "stores", "milk", "rice", "atta", "dal", "vegetables", "fruits", "bread", "oil"]
+  },
+  "Shopping": {
+    "vendors": ["Amazon", "Flipkart", "Myntra", "Meesho", "Nykaa", "Croma", "Reliance Digital"],
+    "keywords": ["fashion", "textiles", "saree", "shoes", "apparel", "electronics", "headphones", "mouse", "cable", "mobile", "garments"]
+  },
+  "Travel": {
+    "vendors": ["Uber", "Ola", "Rapido", "IRCTC", "MakeMyTrip"],
+    "keywords": ["trip", "ride", "cab", "taxi", "pickup", "drop", "flight", "train", "bus", "ticket", "travels", "fare"]
+  },
+  "Fuel": {
+    "vendors": [],
+    "keywords": ["petrol", "diesel", "fuel", "indian oil", "bharat petroleum", "hp petrol", "litre", "cng"]
+  },
+  "Utilities": {
+    "vendors": ["BESCOM", "TNEB", "MSEDCL", "Tata Power", "Adani Electricity"],
+    "keywords": ["electricity", "water bill", "gas bill", "units consumed", "tariff", "energy charges", "meter"]
+  },
+  "Telecom & Internet": {
+    "vendors": ["Airtel", "Jio", "Vodafone Idea", "BSNL"],
+    "keywords": ["postpaid", "prepaid", "recharge", "broadband", "mobile plan", "data pack", "fiber"]
+  },
+  "Health": {
+    "vendors": ["Apollo Pharmacy", "PharmEasy", "1mg"],
+    "keywords": ["medical", "pharmacy", "chemist", "medicine", "tablet", "syrup", "clinic", "hospital", "doctor", "diagnostic"]
+  },
+  "Office & Stationery": {
+    "vendors": [],
+    "keywords": ["stationery", "stationers", "paper", "marker", "pen", "printer", "toner", "office", "notebook"]
+  },
+  "Home & Hardware": {
+    "vendors": [],
+    "keywords": ["hardware", "pipe", "paint", "electrical", "plumbing", "furniture", "tools", "cement"]
+  }
+}
