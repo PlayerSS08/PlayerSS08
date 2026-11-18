@@ -16,6 +16,31 @@ GST_COLOURS = {"CGST": "#2a78d6", "SGST": "#eb6834", "IGST": "#1baf7a"}
 
 
 # ----------------------------------------------------------------------
+# Formatting
+# ----------------------------------------------------------------------
+def group_indian(value: float, decimals: int = 2) -> str:
+    """
+    Indian digit grouping, as printed on Indian invoices:
+    1234567.5 -> '12,34,567.50' (last three digits, then pairs).
+    """
+    negative = value < 0
+    whole, _, fraction = f"{abs(value):.{decimals}f}".partition(".")
+    head, tail = whole[:-3], whole[-3:]
+    pairs = []
+    while len(head) > 2:
+        pairs.insert(0, head[-2:])
+        head = head[:-2]
+    grouped = ",".join(([head] if head else []) + pairs + [tail])
+    text = grouped + (f".{fraction}" if decimals else "")
+    return f"-{text}" if negative else text
+
+
+def inr(value: float, decimals: int = 0) -> str:
+    """'₹ 1,23,456' - the app's one way of writing rupee amounts."""
+    return f"₹ {group_indian(value, decimals)}"
+
+
+# ----------------------------------------------------------------------
 # Numbers
 # ----------------------------------------------------------------------
 def summary_metrics(df: pd.DataFrame) -> dict:
@@ -235,7 +260,7 @@ def insights(df: pd.DataFrame, budgets: dict = None, today=None) -> list:
     if mom["change_pct"] is not None:
         direction = "more" if mom["change_pct"] > 0 else "less"
         notes.append(f"You spent {abs(mom['change_pct']):.0f}% {direction} in {mom['month']} "
-                     f"(₹ {mom['this_month']:,.0f}) than the month before (₹ {mom['last_month']:,.0f}).")
+                     f"({inr(mom['this_month'])}) than the month before ({inr(mom['last_month'])}).")
     categories = spend_by_category(df)
     if not categories.empty and categories["total_amount"].sum() > 0:
         top = categories.iloc[0]
@@ -243,11 +268,11 @@ def insights(df: pd.DataFrame, budgets: dict = None, today=None) -> list:
         notes.append(f"{top['category']} is your biggest category: {share:.0f}% of all spending.")
     vendors = spend_by_vendor(df, top=1)
     if not vendors.empty:
-        notes.append(f"Top vendor: {vendors.iloc[0]['vendor']} (₹ {vendors.iloc[0]['total_amount']:,.0f}).")
+        notes.append(f"Top vendor: {vendors.iloc[0]['vendor']} ({inr(vendors.iloc[0]['total_amount'])}).")
     status = budget_status(df, budgets or {}, pd.Timestamp(today) if today else latest_month(df))
     for _, row in status[status["status"] != "ok"].iterrows():
         word = "over" if row["status"] == "over" else "close to"
-        notes.append(f"⚠️ {row['category']} is {word} its budget: ₹ {row['spent']:,.0f} of ₹ {row['limit']:,.0f}.")
+        notes.append(f"⚠️ {row['category']} is {word} its budget: {inr(row['spent'])} of {inr(row['limit'])}.")
     anomalies = find_anomalies(df)
     if not anomalies.empty:
         notes.append(f"{len(anomalies)} invoice(s) look unusually large - see the Dashboard.")

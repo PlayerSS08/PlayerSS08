@@ -22,7 +22,7 @@ RED = (0.80, 0.20, 0.20)
 
 def _money(value) -> str:
     """Rs. 1,234.50 (the base PDF fonts have no ₹ glyph)."""
-    return "-" if value is None or pd.isna(value) else f"Rs. {value:,.2f}"
+    return "-" if value is None or pd.isna(value) else f"Rs. {dashboard.group_indian(value)}"
 
 
 class _Writer:

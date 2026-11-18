@@ -56,10 +56,20 @@ def test_pages_render_with_data(page):
     assert not app.exception, app.exception
 
 
-def test_home_shows_budget_warning():
+def test_home_attention_strip_lists_budget_and_review():
     add_rows()
     app = open_page("ui/home.py")
-    assert any("budget" in w.value for w in app.warning)
+    strip = " ".join(m.value for m in app.markdown)
+    assert "of budget" in strip
+    assert app.title[0].value == "Overview"
+
+
+def test_home_all_caught_up_when_nothing_pending():
+    db.insert_invoice(InvoiceData(source_file="a.pdf", file_hash="h9", extraction_method="pdf_text",
+                                  vendor="Shop", invoice_number="1", invoice_date="2026-10-01",
+                                  total_amount=100.0))
+    app = open_page("ui/home.py")
+    assert any("Nothing needs your attention" in m.value for m in app.markdown)
 
 
 def test_records_filters_by_search():

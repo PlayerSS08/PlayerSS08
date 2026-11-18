@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import config
+from analytics import dashboard
 from extractor import ocr
 from storage import db
 
@@ -48,18 +49,20 @@ def money(value, currency: str = "INR") -> str:
     """₹ 1,234.50 style text ('-' when missing)."""
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return "-"
-    return f"{CURRENCY_SYMBOLS.get(currency or 'INR', (currency or '') + ' ')} {value:,.2f}"
+    if (currency or "INR") == "INR":
+        return dashboard.inr(value, 2)
+    return f"{CURRENCY_SYMBOLS.get(currency, currency + ' ')} {value:,.2f}"
 
 
 def money_short(value) -> str:
-    """Compact amount for metric cards: ₹ 19,034 / ₹ 1.2L / ₹ 2.5Cr."""
+    """Compact amount for metric cards: ₹ 19,034 / ₹ 1.2L / ₹ 2.5Cr (no decimals)."""
     if value is None or pd.isna(value):
         return "-"
     if value >= 1e7:
         return f"₹ {value / 1e7:.1f}Cr"
     if value >= 1e5:
         return f"₹ {value / 1e5:.1f}L"
-    return f"₹ {value:,.0f}"
+    return dashboard.inr(value)
 
 
 def confidence_colour(score) -> str:

@@ -49,8 +49,14 @@ invoices.
 - **SQLite** database with automatic upgrade of older databases; a copy of every original file is
   kept so you can look at it again later
 
+**Visual design**: one brand blue reserved for actions, neutral greys, status colours only for
+meaning (always with a word), the Inter typeface bundled in `static/fonts` (works offline), Indian
+digit grouping for amounts (₹ 1,23,456), and colours checked against the WCAG 2.2 contrast minimums
+in light and dark mode. All of it lives in `.streamlit/config.toml`.
+
 **Interactive app** (7 pages, light and dark mode)
-- **Home**: month-on-month spend, insights in plain English, budget alerts, quick actions,
+- **Home ("Overview")**: this month's spend as the hero figure, cards for invoices, items to
+  review and budgets, one attention strip for everything that needs action, spend by category and
   recent invoices, one-click sample data
 - **Upload & Extract**: confidence badges, editable fields, category/currency/payment pickers, line
   items and raw text tabs, "save all ready" and filter by status
@@ -76,6 +82,7 @@ invoices.
 | Batch Scan | ![Batch Scan](docs/screenshots/6_batch_scan.png) |
 | Settings | ![Settings](docs/screenshots/7_settings.png) |
 | Dark mode | ![Dashboard in dark mode](docs/screenshots/8_dashboard_dark.png) |
+| Home, dark mode | ![Home in dark mode](docs/screenshots/9_home_dark.png) |
 
 ## 4. Architecture
 
@@ -130,10 +137,11 @@ invoice-extractor/
 │   ├── scan_folder.py          # batch CLI (descendant of the old Scanner.py)
 │   └── evaluate.py             # accuracy report against tests/ground_truth.csv
 ├── tessdata/eng.traineddata    # bundled English model for Tesseract
-├── tests/                      # pytest suite (250 tests)
+├── tests/                      # pytest suite (258 tests)
 │   ├── samples/                # 18 sample invoices + make_samples.py
 │   └── ground_truth.csv        # expected values for each sample
-├── assets/logo.png  .streamlit/config.toml  docs/screenshots/
+├── assets/logo.png  .streamlit/config.toml (theme)  docs/screenshots/
+├── static/fonts/               # bundled Inter typeface (SIL Open Font License)
 ├── data/                       # invoices.db + copies of saved files (gitignored)
 ├── invoices/                   # drop-in folder for batch scan (gitignored)
 └── requirements.txt

@@ -1,4 +1,5 @@
 """Tests for analytics/dashboard.py."""
+import pytest
 
 import pandas as pd
 
@@ -110,3 +111,12 @@ def test_insights_mention_budget_and_change():
 def test_advanced_figures_build():
     for make in (dashboard.category_figure, dashboard.trend_figure, dashboard.payment_figure):
         assert make(ADV).data
+
+
+@pytest.mark.parametrize("value, decimals, expected", [
+    (0, 2, "0.00"), (999, 0, "999"), (1234.5, 2, "1,234.50"), (123456, 0, "1,23,456"),
+    (1234567.891, 2, "12,34,567.89"), (-50000, 0, "-50,000"), (10000000, 0, "1,00,00,000"),
+])
+def test_group_indian(value, decimals, expected):
+    assert dashboard.group_indian(value, decimals) == expected
+    assert dashboard.inr(123456) == "₹ 1,23,456"
