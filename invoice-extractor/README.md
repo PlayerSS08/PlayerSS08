@@ -113,7 +113,9 @@ in light and dark mode. All of it lives in `.streamlit/config.toml`.
 ```
 invoice-extractor/
 ├── app.py                      # Streamlit entry point: page setup + navigation
-├── run.py / install.py         # one-command launch / install helpers
+├── Start Invoice Extractor.bat / .command   # double-click to open the app
+├── launch.py                   # what those files run: install once, start, open browser
+├── run.py / install.py         # manual launch / install helpers
 ├── config.py                   # constants: paths, thresholds, OCR engine
 ├── ui/                         # one script per page + shared components
 │   ├── home.py  upload.py  records.py  dashboard.py  budgets.py  batch.py  settings.py
@@ -137,7 +139,7 @@ invoice-extractor/
 │   ├── scan_folder.py          # batch CLI (descendant of the old Scanner.py)
 │   └── evaluate.py             # accuracy report against tests/ground_truth.csv
 ├── tessdata/eng.traineddata    # bundled English model for Tesseract
-├── tests/                      # pytest suite (258 tests)
+├── tests/                      # pytest suite (263 tests)
 │   ├── samples/                # 18 sample invoices + make_samples.py
 │   └── ground_truth.csv        # expected values for each sample
 ├── assets/logo.png  .streamlit/config.toml (theme)  docs/screenshots/
@@ -163,7 +165,24 @@ Its logic was **moved and extended, not deleted**:
 | "REVIEW" message & skip | file is **saved** and flagged `needs_review` |
 | `scan_invoices()` / `show_database()` | `scripts/scan_folder.py` (PDFs **and** images) and the Batch Scan page |
 
-## 5. Installation
+## 5. Quick start (one click)
+
+Unzip the project and double-click:
+
+| Computer | File to double-click |
+|---|---|
+| Windows | `Start Invoice Extractor.bat` |
+| macOS | `Start Invoice Extractor.command` (first time: right-click → Open) |
+| Linux | run `./"Start Invoice Extractor.command"` in a terminal |
+
+The app opens in your browser at <http://localhost:8501>. The first start installs the libraries
+**once** (into a private `.venv` folder, using the bundled offline wheels); every later start skips
+that and opens straight away. If the libraries are already installed, nothing is installed at all.
+Double-clicking again while the app is running just opens the browser tab. Keep the small window
+open while you use the app; close it to stop the app. The only thing you need beforehand is
+**Python 3.10+** (on Windows tick "Add Python to PATH").
+
+## 5b. Manual installation
 
 Requires **Python 3.10+** (tested on 3.13) on Windows, macOS or Linux. On Windows tick
 **"Add Python to PATH"** when installing Python.
