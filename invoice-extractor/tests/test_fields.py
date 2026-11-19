@@ -368,3 +368,24 @@ Total Rs.             610.00"""
 ])
 def test_line_items_skip_non_items(line):
     assert fields.extract_line_items(line) == ([], 0.0)
+
+
+@pytest.mark.parametrize("line, expected", [
+    ("₹315.00", 315.0), ("1,180.00", 1180.0), ("₹ 7", 7.0),
+    ("1", None), ("Amount", None), ("123110", None), ("₹0.00 ₹315.00", None),
+])
+def test_money_line_value(line, expected):
+    assert fields.money_line_value(line) == expected
+
+
+def test_total_label_alone_takes_last_stacked_amount():
+    assert fields.extract_total("TOTAL:\n₹0.00\n₹315.00\nAmount in Words") == (315.0, 0.9)
+
+
+def test_total_heading_followed_by_serial_number_is_ignored():
+    text = "Total Amount\n1\nItem\n₹40.00\nTOTAL:\n₹1.06\n₹7.00"
+    assert fields.extract_total(text)[0] == 7.0
+
+
+def test_tax_label_alone_takes_first_stacked_amount():
+    assert fields.extract_cgst("9%\nCGST\n₹0.53\n₹7.00")[0] == 0.53

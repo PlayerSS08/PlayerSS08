@@ -133,6 +133,33 @@ def badges_for(record: dict) -> None:
         cols[4].badge("Needs review", icon=":material/flag:", color="orange")
 
 
+def gst_caption(cgst, sgst, igst, currency: str = "INR") -> None:
+    """One line under the fields: Total GST = CGST + SGST + IGST."""
+    parts = [(name, value) for name, value in (("CGST", cgst), ("SGST", sgst), ("IGST", igst))
+             if value is not None and not pd.isna(value)]
+    if not parts:
+        st.caption("Total GST: not found on this invoice")
+        return
+    total = round(sum(value for _, value in parts), 2)
+    detail = " + ".join(f"{name} {money(value, currency)}" for name, value in parts)
+    st.markdown(f"**Total GST: {money(total, currency)}** · {detail}")
+
+
+def documents_table(documents: list, currency: str = "INR") -> None:
+    """When one file holds several invoices: list them, with what was added together."""
+    if not documents or len(documents) < 2:
+        return
+    st.info(f"This file contains **{len(documents)} separate invoices** (for example a product "
+            "and its delivery or cash-on-delivery fee). Their totals and GST are added together "
+            "above; the details come from the first invoice.", icon=":material/library_books:")
+    table = pd.DataFrame(documents)
+    st.dataframe(table, hide_index=True, width="stretch", column_config={
+        "invoice_number": "Invoice no.", "vendor": "Seller", "invoice_date": "Date",
+        "total_amount": st.column_config.NumberColumn("Total", format="₹ %.2f"),
+        "gst": st.column_config.NumberColumn("GST", format="₹ %.2f"),
+    })
+
+
 def line_items_table(items: list, currency: str = "INR") -> None:
     """Purchased items, or a hint that none were found."""
     if not items:

@@ -10,7 +10,7 @@ from storage import db, export
 from ui import components
 
 TABLE_COLUMNS = ["id", "invoice_date", "vendor", "category", "invoice_number", "total_amount",
-                 "payment_method", "needs_review"]
+                 "gst_total", "payment_method", "needs_review"]
 BULK_COLUMNS = ["id", "invoice_date", "invoice_time", "vendor", "category", "invoice_number",
                 "total_amount", "subtotal", "cgst", "sgst", "igst", "gstin", "payment_method",
                 "needs_review", "warnings", "source_file", "scanned_at"]
@@ -23,6 +23,7 @@ COLUMN_CONFIG = {
     "invoice_number": "Invoice no.", "gstin": "GSTIN", "warnings": "Warnings",
     "payment_method": "Paid by", "source_file": "File", "scanned_at": "Scanned at",
     "total_amount": st.column_config.NumberColumn("Total", format="₹ %.2f"),
+    "gst_total": st.column_config.NumberColumn("GST", format="₹ %.2f"),
     "subtotal": st.column_config.NumberColumn("Subtotal", format="%.2f"),
     "cgst": st.column_config.NumberColumn("CGST", format="%.2f"),
     "sgst": st.column_config.NumberColumn("SGST", format="%.2f"),
@@ -91,6 +92,9 @@ def detail(invoice_id: int) -> None:
         components.badges_for(record)
         if record.get("warnings"):
             st.warning(record["warnings"], icon=":material/flag:")
+        components.gst_caption(record.get("cgst"), record.get("sgst"), record.get("igst"),
+                               record.get("currency"))
+        components.documents_table(record.get("documents"), record.get("currency"))
         left, right = st.columns([1, 2])
         with left:
             preview = components.preview_from_record(record)

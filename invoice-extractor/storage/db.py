@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS invoices (
     category        TEXT,                      -- expense category
     payment_method  TEXT,                      -- UPI / Card / Cash ...
     line_items_json TEXT,                      -- JSON list of purchased items
-    file_path       TEXT                       -- copy of the original file (data/files)
+    file_path       TEXT,                      -- copy of the original file (data/files)
+    documents_json  TEXT                       -- invoices inside the file, when more than one
 );
 CREATE INDEX IF NOT EXISTS idx_vendor ON invoices(vendor);
 CREATE INDEX IF NOT EXISTS idx_date   ON invoices(invoice_date);
@@ -69,7 +70,7 @@ CREATE TABLE IF NOT EXISTS settings (
 # Columns added after the first version: older databases get them via ALTER TABLE.
 ADDED_COLUMNS = {
     "category": "TEXT", "payment_method": "TEXT",
-    "line_items_json": "TEXT", "file_path": "TEXT",
+    "line_items_json": "TEXT", "file_path": "TEXT", "documents_json": "TEXT",
 }
 
 # Columns a user is allowed to change from the UI.
@@ -177,8 +178,8 @@ def insert_invoice(invoice: InvoiceData, db_path: Optional[Path] = None,
                 invoice_time, vendor, gstin, subtotal, cgst, sgst, igst,
                 total_amount, currency, extraction_method, confidence_json,
                 needs_review, warnings, raw_text, scanned_at,
-                category, payment_method, line_items_json, file_path
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                category, payment_method, line_items_json, file_path, documents_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 invoice.file_hash, invoice.source_file, invoice.invoice_number,
@@ -189,7 +190,7 @@ def insert_invoice(invoice: InvoiceData, db_path: Optional[Path] = None,
                 int(invoice.needs_review),
                 WARNING_SEPARATOR.join(invoice.warnings), invoice.raw_text,
                 _now(), invoice.category, invoice.payment_method,
-                json.dumps(invoice.line_items), file_path,
+                json.dumps(invoice.line_items), file_path, json.dumps(invoice.documents),
             ),
         )
         return cursor.rowcount == 1
@@ -250,6 +251,7 @@ def get_invoice(invoice_id: int, db_path: Optional[Path] = None) -> Optional[dic
     record = dict(row)
     record["line_items"] = json.loads(record.get("line_items_json") or "[]")
     record["confidence"] = json.loads(record.get("confidence_json") or "{}")
+    record["documents"] = json.loads(record.get("documents_json") or "[]")
     return record
 
 
@@ -303,6 +305,9 @@ def get_all_invoices(db_path: Optional[Path] = None) -> pd.DataFrame:
     with connect(db_path) as conn:
         df = pd.read_sql_query("SELECT * FROM invoices ORDER BY id DESC", conn)
     df["needs_review"] = df["needs_review"].astype(bool)
+    # total GST = CGST + SGST + IGST (empty when no GST amount was found)
+    taxes = df[["cgst", "sgst", "igst"]].apply(pd.to_numeric, errors="coerce")
+    df["gst_total"] = taxes.sum(axis=1, min_count=1).round(2)
     return df
 
 

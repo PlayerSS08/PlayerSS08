@@ -39,6 +39,9 @@ invoices.
   **payment method** (UPI, Card, Cash, Net Banking, Wallet)
 - **Indian formats**: day-first dates (`31/10/26`, `31-Oct-2026`, …), `₹ / Rs. / INR`, lakh grouping
   (`1,23,456.78`), `500/-`, common OCR mistakes (`O→0`, `l→1`, `S→5` inside numbers)
+- **Several invoices in one PDF** (e.g. an Amazon order: the seller's invoice plus Amazon's
+  cash-on-delivery fee invoice): each is read separately, the totals and GST are added up, and both
+  invoices are listed; **Total GST** (CGST + SGST + IGST) is shown for every invoice
 - **Confidence score per field** plus a weighted overall score; low-confidence fields get a ⚠️
 
 **Checking and storage**
@@ -139,8 +142,8 @@ invoice-extractor/
 │   ├── scan_folder.py          # batch CLI (descendant of the old Scanner.py)
 │   └── evaluate.py             # accuracy report against tests/ground_truth.csv
 ├── tessdata/eng.traineddata    # bundled English model for Tesseract
-├── tests/                      # pytest suite (263 tests)
-│   ├── samples/                # 18 sample invoices + make_samples.py
+├── tests/                      # pytest suite (277 tests)
+│   ├── samples/                # 19 sample invoices + make_samples.py
 │   └── ground_truth.csv        # expected values for each sample
 ├── assets/logo.png  .streamlit/config.toml (theme)  docs/screenshots/
 ├── static/fonts/               # bundled Inter typeface (SIL Open Font License)
@@ -222,7 +225,7 @@ python run.py
 ```
 
 (or `streamlit run app.py`). The browser opens at <http://localhost:8501>. On the Home page press
-**Load sample invoices** to explore every feature with the 18 samples.
+**Load sample invoices** to explore every feature with the 19 samples.
 
 Batch scan from the command line (put files in `invoices/` first):
 
@@ -250,15 +253,15 @@ python tests/samples/make_samples.py
 
 ## 7. Accuracy results
 
-Output of `python scripts/evaluate.py` on the 18 files in `tests/samples/` (bundled Tesseract 5.5):
+Output of `python scripts/evaluate.py` on the 19 files in `tests/samples/` (bundled Tesseract 5.5):
 
 | Field | Correct / Total | Accuracy |
 |---|---|---|
-| invoice_number (only where present) | 17 / 17 | 100.0% |
-| invoice_date | 17 / 18 | 94.4% |
+| invoice_number (only where present) | 18 / 18 | 100.0% |
+| invoice_date | 18 / 19 | 94.7% |
 | invoice_time (only where present) | 8 / 8 | 100.0% |
-| vendor | 17 / 18 | 94.4% |
-| total_amount | 18 / 18 | 100.0% |
+| vendor | 18 / 19 | 94.7% |
+| total_amount | 19 / 19 | 100.0% |
 
 Matching rules: amounts within ₹0.01, dates/times compared as ISO strings, vendor matched
 case-insensitively as a substring. Both misses are on the handwritten-style bill (OCR drops

@@ -34,7 +34,7 @@ with action_col:
 if df.empty:
     with st.container(border=True):
         st.subheader("Start with your first invoices", anchor=False)
-        st.write("Upload PDFs or bill photos, or load the 18 sample invoices to see every "
+        st.write("Upload PDFs or bill photos, or load the 19 sample invoices to see every "
                  "feature with realistic data.")
         if st.button("Load sample invoices", icon=":material/download:"):
             components.load_demo_data()

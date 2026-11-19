@@ -13,15 +13,38 @@ from extractor import categories, fields, validators
 from extractor.models import InvoiceData
 
 
-def parse_invoice(text: str, source_file: str = "", file_hash: str = "",
-                  extraction_method: str = "pdf_text",
-                  today: Optional[date] = None) -> InvoiceData:
-    """Run every field extractor over the text, then validate the result."""
-    clean = fields.normalize_text(text)
-    invoice = InvoiceData(source_file=source_file, file_hash=file_hash,
-                          extraction_method=extraction_method, raw_text=text or "",
-                          currency=config.DEFAULT_CURRENCY)
+PAGE_SEPARATOR = "\f"     # what text_extraction puts between PDF pages
 
+
+def split_documents(text: str) -> list:
+    """
+    Split a file's text into separate invoices.
+
+    Some PDFs hold more than one invoice - e.g. an Amazon order prints the
+    seller's invoice on page 1 and Amazon's own cash-on-delivery fee invoice
+    on page 2, each with its own invoice number, seller and total. A page
+    starts a new invoice when it shows an invoice number different from the
+    one before; a page with no number, or the same number, continues it.
+    """
+    pages = [page for page in (text or "").split(PAGE_SEPARATOR) if page.strip()]
+    documents, current, current_number = [], [], None
+    for page in pages:
+        number, _ = fields.extract_invoice_number(page)
+        if current and number and current_number and number != current_number:
+            documents.append("\n".join(current))
+            current, current_number = [], None
+        current.append(page)
+        current_number = current_number or number
+    if current:
+        documents.append("\n".join(current))
+    return documents or [text or ""]
+
+
+def _extract_fields(text: str, today: Optional[date] = None) -> InvoiceData:
+    """Run every field extractor over ONE invoice's text (no validation)."""
+    clean = fields.normalize_text(text)
+    invoice = InvoiceData(source_file="", file_hash="", extraction_method="",
+                          currency=config.DEFAULT_CURRENCY)
     invoice.invoice_number, invoice.confidence["invoice_number"] = fields.extract_invoice_number(clean)
     invoice.invoice_date, invoice.confidence["invoice_date"] = fields.extract_date(clean, today)
     invoice.invoice_time, invoice.confidence["invoice_time"] = fields.extract_time(clean, today)
@@ -36,12 +59,65 @@ def parse_invoice(text: str, source_file: str = "", file_hash: str = "",
     invoice.payment_method, _ = fields.extract_payment_method(clean)
     invoice.line_items, _ = fields.extract_line_items(clean)
     invoice.category, invoice.confidence["category"] = categories.categorize(invoice.vendor, clean)
-
     if invoice.total_amount is not None and \
             invoice.confidence["total_amount"] == fields.TOTAL_GUESS_CONFIDENCE:
         invoice.add_warning("total guessed")
     if not clean.strip():
         invoice.add_warning("no text could be extracted")
+    return invoice
+
+
+def _add_up(values: list) -> Optional[float]:
+    """Sum of the values that were found (None if none were)."""
+    found = [v for v in values if v is not None]
+    return round(sum(found), 2) if found else None
+
+
+def combine_documents(parts: list) -> InvoiceData:
+    """
+    Merge several invoices from one file into one record:
+    * identity (number, date, vendor, GSTIN, category) = the FIRST invoice,
+      which is the main purchase (e.g. the product, not the delivery fee)
+    * total amount = the sum of every invoice's total = what was paid
+    * CGST / SGST / IGST = summed per tax type across the invoices
+    * line items are joined; each invoice is listed in `documents`
+    """
+    from dataclasses import replace
+    main = parts[0]
+    merged = replace(main, confidence=dict(main.confidence), warnings=list(main.warnings),
+                     line_items=[item for part in parts for item in part.line_items])
+    totals = [part.total_amount for part in parts]
+    merged.total_amount = _add_up(totals)
+    if None in totals and merged.total_amount is not None:
+        merged.add_warning("total missing for one of the invoices in this file")
+    merged.confidence["total_amount"] = min(p.confidence.get("total_amount", 0.0) for p in parts)
+    for tax in ("cgst", "sgst", "igst"):
+        setattr(merged, tax, _add_up([getattr(part, tax) for part in parts]))
+    subtotals = [part.subtotal for part in parts]
+    merged.subtotal = None if None in subtotals else _add_up(subtotals)
+    merged.payment_method = next((p.payment_method for p in parts if p.payment_method), None)
+    merged.invoice_date = merged.invoice_date or next((p.invoice_date for p in parts if p.invoice_date), None)
+    for part in parts[1:]:
+        for warning in part.warnings:
+            merged.add_warning(warning)
+    merged.documents = [{"invoice_number": p.invoice_number, "vendor": p.vendor,
+                         "invoice_date": p.invoice_date, "total_amount": p.total_amount,
+                         "gst": p.gst_total()} for p in parts]
+    return merged
+
+
+def parse_invoice(text: str, source_file: str = "", file_hash: str = "",
+                  extraction_method: str = "pdf_text",
+                  today: Optional[date] = None) -> InvoiceData:
+    """
+    Turn a file's text into one validated InvoiceData.
+    A file holding several invoices is read invoice by invoice and combined.
+    """
+    documents = split_documents(text)
+    parts = [_extract_fields(doc, today) for doc in documents]
+    invoice = parts[0] if len(parts) == 1 else combine_documents(parts)
+    invoice.source_file, invoice.file_hash = source_file, file_hash
+    invoice.extraction_method, invoice.raw_text = extraction_method, text or ""
     return validators.validate_invoice(invoice, today)
 
 

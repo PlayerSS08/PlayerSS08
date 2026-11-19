@@ -15,7 +15,7 @@ import pandas as pd
 # out because it makes spreadsheets huge).
 EXPORT_COLUMNS = [
     "id", "invoice_date", "invoice_time", "vendor", "category", "invoice_number",
-    "total_amount", "currency", "payment_method", "subtotal", "cgst", "sgst", "igst", "gstin",
+    "total_amount", "currency", "payment_method", "subtotal", "cgst", "sgst", "igst", "gst_total", "gstin",
     "needs_review", "warnings", "extraction_method", "source_file", "scanned_at",
 ]
 

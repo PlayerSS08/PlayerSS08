@@ -12,6 +12,7 @@ Replace or extend these with real (blurred) invoices when you have them;
 just add a row to ground_truth.csv for every new file.
 
 Run from the project folder:  python tests/samples/make_samples.py
+(or add file names to rebuild only those files)
 """
 
 import csv
@@ -297,6 +298,31 @@ SAMPLES = [
         "Amount Payable                Rs 3,517.50",
     ], ("RT-7781", "2026-08-03", "", "Rangoli Textiles", 3517.50)),
 
+    ("amazon_two_invoices.pdf", "pdf", [
+        "Tax Invoice/Bill of Supply/Cash Memo", "(Original for Recipient)", "Page 1 of 1",
+        "For Pageturn Books Limited:", "Authorized Signatory",
+        "Order Number: 402-1111111-2222222", "Invoice Number : PTB-204518",
+        "Order Date: 14.10.2026", "Invoice Date : 15.10.2026",
+        "Sl.", "No", "Description", "Unit", "Price", "Qty Net", "Amount", "Tax", "Rate", "Tax",
+        "Type", "Tax", "Amount", "Total", "Amount",
+        "1", "Wings of Fire | 8173711461", "HSN:49011010", "₹299.00", "1", "₹299.00", "0%", "IGST",
+        "₹0.00", "₹299.00", "Shipping Charges", "₹40.00", "₹40.00", "0%", "IGST", "₹0.00", "₹40.00",
+        "TOTAL:", "₹0.00", "₹339.00", "Amount in Words:", "Three Hundred Thirty Nine only",
+        "Sold By :", "Pageturn Books Limited", "*", "Sector 18, Gurugram, Haryana - 122015",
+        "PAN No: AAKCP1234Q", "GST Registration No: 06AAKCP1234Q1Z5",
+        "Billing Address :", "Customer Name", "1 Example Street, Pune, MAHARASHTRA, 411001",
+        "<<PAGE>>",
+        "Tax Invoice/Bill of Supply/Cash Memo", "(Original for Recipient)",
+        "Amazon.in - Amazon Seller Services Private Limited", "Page 1 of 1",
+        "Order Number:402-1111111-2222222", "Invoice Number :POD-27-300000002",
+        "Order Date:14.10.2026", "Invoice Date :15.10.2026",
+        "Sl. No Description", "Unit Price", "Qty Net Amount", "Tax Rate", "Tax Type", "Tax Amount",
+        "Total Amount", "1", "Cash/Pay on Delivery fee:", "₹5.94", "₹5.94", "9%", "CGST", "₹0.53",
+        "₹7.00", "9%", "SGST", "₹0.53", "TOTAL:", "₹1.06", "₹7.00", "Amount in Words:", "Seven only",
+        "Sold By :", "Amazon Seller Services Private Limited", "*",
+        "Bangalore, Karnataka – 560064", "GST Registration No:29AAICA3918J1ZE",
+    ], ("PTB-204518", "2026-10-15", "", "Pageturn Books Limited", 346.00)),
+
     ("zepto_order.pdf", "pdf", [
         "zepto",
         "Kiranakart Technologies Pvt Ltd",
@@ -317,9 +343,17 @@ SAMPLES = [
 def write_pdf(path, lines):
     """Digital PDF with a real text layer."""
     doc = pymupdf.open()
-    page = doc.new_page(width=842 if max(map(len, lines)) > 90 else 595, height=842)
+    width = 842 if max(map(len, lines)) > 90 else 595
+    page = doc.new_page(width=width, height=842)
     y = 60
     for line in lines + ["", FOOTER]:
+        if line == "<<PAGE>>":                       # a second invoice on its own page
+            page = doc.new_page(width=width, height=842)
+            y = 60
+            continue
+        if y > 800:                                  # long invoice: continue on a new page
+            page = doc.new_page(width=width, height=842)
+            y = 60
         page.insert_text((40, y), line, fontsize=9.5, fontname="dj", fontfile=SANS)
         y += 17
     doc.subset_fonts()          # keep only the used glyphs -> small files
@@ -404,10 +438,15 @@ def build(file, kind, lines, seed):
         handwritten(lines + [FOOTER[:6]], seed).save(path, quality=85)
 
 
-def main():
+def main(only=None):
+    """Build the samples (all, or only the file names given) and ground_truth.csv."""
     OUT.mkdir(parents=True, exist_ok=True)
     rows = []
     for seed, (file, kind, lines, truth) in enumerate(SAMPLES, start=1):
+        if only and file not in only:
+            rows.append(dict(zip(["file", "invoice_number", "invoice_date", "invoice_time", "vendor"],
+                                 [file, *truth[:4]]), total_amount=f"{truth[4]:.2f}"))
+            continue
         build(file, kind, lines, seed)
         number, inv_date, inv_time, vendor, total = truth
         rows.append({"file": file, "invoice_number": number, "invoice_date": inv_date,
@@ -421,4 +460,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:] or None)       # e.g. python tests/samples/make_samples.py zepto_order.pdf

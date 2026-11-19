@@ -16,6 +16,10 @@ from pathlib import Path
 
 import config
 
+# Placed between PDF pages so the parser can tell where a page ends
+# (a form-feed character, which a printed invoice never contains).
+PAGE_BREAK = "\n\f\n"
+
 
 def compute_file_hash(data: bytes) -> str:
     """SHA-256 hex digest of the raw file bytes (used for de-duplication)."""
@@ -39,14 +43,14 @@ def pdf_text_pymupdf(path) -> str:
     """Read the text layer of every page with pymupdf (from Scanner.py)."""
     import pymupdf
     with pymupdf.open(path) as document:
-        return "\n".join(page.get_text() for page in document)
+        return PAGE_BREAK.join(page.get_text() for page in document)
 
 
 def pdf_text_pdfplumber(path) -> str:
     """Second option: read the text layer with pdfplumber."""
     import pdfplumber
     with pdfplumber.open(path) as pdf:
-        return "\n".join((page.extract_text() or "") for page in pdf.pages)
+        return PAGE_BREAK.join((page.extract_text() or "") for page in pdf.pages)
 
 
 def extract_pdf_text(path) -> str:

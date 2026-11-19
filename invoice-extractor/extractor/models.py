@@ -31,6 +31,8 @@ class InvoiceData:
     category: Optional[str] = None       # e.g. "Food & Dining" (categories.json)
     payment_method: Optional[str] = None # "UPI" | "Card" | "Cash" | ...
     line_items: list = field(default_factory=list)  # [{description, quantity, rate, amount}]
+    documents: list = field(default_factory=list)   # when one file holds several invoices:
+                                                    # [{invoice_number, vendor, invoice_date, total_amount, gst}]
     confidence: dict = field(default_factory=dict)  # {"invoice_date": 0.9, ...}
     needs_review: bool = False
     warnings: list = field(default_factory=list)
@@ -39,6 +41,11 @@ class InvoiceData:
     def to_dict(self) -> dict:
         """Return the invoice as a plain dictionary (handy for tables)."""
         return asdict(self)
+
+    def gst_total(self) -> Optional[float]:
+        """CGST + SGST + IGST (None when no GST amount was found)."""
+        taxes = [t for t in (self.cgst, self.sgst, self.igst) if t is not None]
+        return round(sum(taxes), 2) if taxes else None
 
     def add_warning(self, message: str) -> None:
         """Add a warning once (duplicates are ignored)."""

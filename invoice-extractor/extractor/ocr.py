@@ -303,4 +303,4 @@ def ocr_pdf(path) -> str:
     """OCR a scanned PDF page by page."""
     if not ocr_available():
         raise OCRUnavailableError(INSTALL_HELP)
-    return "\n".join(ocr_image(page) for page in render_pdf_pages(path))
+    return "\n\f\n".join(ocr_image(page) for page in render_pdf_pages(path))   # page breaks kept

@@ -119,15 +119,39 @@ def find_amounts(segment: str) -> list:
     return values
 
 
+_AMOUNT_ONLY_LINE_RE = re.compile(
+    r"\s*(₹)?\s*-?\s*(\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\s*(?:/-)?\s*")
+
+
+def money_line_value(line: str) -> Optional[float]:
+    """
+    The amount when a whole line is just one money value ("₹315.00", "1,180.00").
+    A bare small number such as a serial "1" or a quantity is NOT money:
+    it needs a ₹ sign or two decimals.
+    """
+    match = _AMOUNT_ONLY_LINE_RE.fullmatch(line)
+    if not match:
+        return None
+    raw = match.group(2)
+    if not match.group(1) and not re.search(r"\.\d{2}$", raw):
+        return None
+    return parse_amount(raw)
+
+
 def _amount_after_label(lines: list, index: int, label_start: int,
-                        label_end: int) -> Optional[float]:
+                        label_end: int, pick: str = "last") -> Optional[float]:
     """
     The money value that belongs to a label found on lines[index].
 
     1. Text after the label on the same line, cut at the next word
        (another label) - take the last number in that piece.
     2. If nothing there, the last number in the rest of the line.
-    3. If the label is alone on its line, the first number on the next line.
+    3. If the label is alone on its line (e.g. "TOTAL:"), the money lines
+       directly below it. Table PDFs often print one cell per line, such as
+       "TOTAL:" / "₹0.00" (tax) / "₹315.00" (total): `pick="last"` takes the
+       final one (totals), `pick="first"` the first (tax amounts).
+       A heading row such as "Total Amount" followed by a serial number "1"
+       is not taken, because "1" is not a money line.
     """
     rest = lines[index][label_end:]
     piece = re.split(r"[A-Za-z]{3,}", rest, maxsplit=1)[0]
@@ -137,11 +161,17 @@ def _amount_after_label(lines: list, index: int, label_start: int,
     # "alone" = nothing else on the line, so it is not a table header row
     before = lines[index][:label_start]
     label_alone = len(re.sub(r"[\s:₹\-.()]", "", before + rest)) == 0
-    if label_alone and index + 1 < len(lines):
-        next_amounts = find_amounts(lines[index + 1])
-        if next_amounts:
-            return next_amounts[0]
-    return None
+    if not label_alone:
+        return None
+    below = []
+    for line in lines[index + 1:index + 6]:
+        value = money_line_value(line)
+        if value is None:
+            break
+        below.append(value)
+    if not below:
+        return None
+    return below[-1] if pick == "last" else below[0]
 
 
 def _label_regex(label: str) -> str:
@@ -150,7 +180,8 @@ def _label_regex(label: str) -> str:
 
 
 def extract_labeled_amount(text: str, labels: list, exclude_after: str = "",
-                           exclude_before: tuple = (), line_start: bool = False) -> Optional[float]:
+                           exclude_before: tuple = (), line_start: bool = False,
+                           pick: str = "last") -> Optional[float]:
     """
     Find the amount next to any of `labels` (tried in priority order).
     The LAST occurrence of a label wins, since summaries are at the bottom.
@@ -169,7 +200,7 @@ def extract_labeled_amount(text: str, labels: list, exclude_after: str = "",
         found = None
         for i, line in enumerate(lines):
             for match in regex.finditer(line):
-                value = _amount_after_label(lines, i, match.start(), match.end())
+                value = _amount_after_label(lines, i, match.start(), match.end(), pick)
                 if value is not None:
                     found = value
         if found is not None:
@@ -430,7 +461,7 @@ def extract_gstin(text: str) -> tuple:
 
 def _tax_amount(text: str, label: str) -> tuple:
     """Amount on the last line labelled CGST / SGST / IGST (percentages ignored)."""
-    value = extract_labeled_amount(normalize_text(text), [label], line_start=True)
+    value = extract_labeled_amount(normalize_text(text), [label], line_start=True, pick="first")
     return (value, 0.8) if value is not None else (None, 0.0)
 
 
@@ -452,7 +483,8 @@ def extract_igst(text: str) -> tuple:
 
 def extract_subtotal(text: str) -> tuple:
     """Amount before tax."""
-    value = extract_labeled_amount(normalize_text(text), SUBTOTAL_LABELS, line_start=True)
+    value = extract_labeled_amount(normalize_text(text), SUBTOTAL_LABELS, line_start=True,
+                                   pick="first")
     return (value, 0.8) if value is not None else (None, 0.0)
 
 
@@ -675,7 +707,8 @@ _NOT_ITEM_RE = re.compile(
     r"\b(?:total|sub\s*-?\s*total|subtotal|tax(?:es|able)?|gst|cgst|sgst|igst|utgst|cess|"
     r"discount|savings?|round(?:ing|ed)?|amount|payable|paid|balance|due|change|cash|"
     r"invoice|bill|receipt|order|date|time|gstin|pan|phone|mob|tel|fee|charges?|delivery|"
-    r"units?|rate\s*:|volume|account|id|no\.?|qty|quantity|hsn|sac|table|tip)\b",
+    r"units?|rate\s*:|volume|account|id|no\.?|qty|quantity|hsn|sac|table|tip|"
+    r"page|signed|signature|pin|pincode|india|state|code)\b",
     re.IGNORECASE,
 )
 _NUM = r"(?:[x×]\s*)?-?(?:[₹$€£]\s*)?-?\d[\d,]*(?:\.\d+)?"
@@ -701,6 +734,9 @@ def _parse_item_line(line: str) -> Optional[dict]:
     numbers = [n for n in numbers if n is not None]
     if not numbers or numbers[-1] <= 0 or numbers[-1] >= config.MAX_REASONABLE_TOTAL:
         return None
+    last_raw = re.findall(r"\d[\d,]*(?:\.\d+)?", match.group("nums"))[-1]
+    if re.fullmatch(r"\d{6}", last_raw) and not re.search(r"[₹$€£]", match.group("nums")):
+        return None                      # a 6-digit PIN code, not a price
     amount, quantity, rate = numbers[-1], 1.0, numbers[-1]
     if len(numbers) >= 3 and abs(numbers[-3] * numbers[-2] - amount) <= 1:
         quantity, rate = numbers[-3], numbers[-2]

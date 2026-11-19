@@ -139,3 +139,164 @@ def test_convert_field():
     assert convert_field("gstin", "29aaacc1234f1z5") == "29AAACC1234F1Z5"
     with pytest.raises(ValueError):
         convert_field("total_amount", "abc")
+
+
+# ----------------------------------------------------------------------
+# One PDF, two invoices (Amazon order paid cash-on-delivery).
+# Layout copied from a real Amazon invoice; customer name, address and
+# order/invoice numbers replaced with placeholders. Pages are separated
+# by "\f" exactly as text_extraction.get_text() separates them.
+# ----------------------------------------------------------------------
+AMAZON_TWO_INVOICES = """Tax Invoice/Bill of Supply/Cash Memo
+(Original for Recipient)
+Please note that this invoice is not a demand for payment
+Page 1 of 1
+For Repro Books Limited:
+Authorized Signatory
+Order Number: 171-0000000-0000001
+Invoice Number : XQVZ-100001
+Order Date: 06.11.2026
+Invoice Details : HR-XQVZ-100001-2627
+Invoice Date : 07.11.2026
+Sl.
+No
+Description
+Unit
+Price
+Qty Net
+Amount
+Tax
+Rate
+Tax
+Type
+Tax
+Amount
+Total
+Amount
+1
+The Iliad | 0140447946 ( RKC0003332955
+)
+HSN:49011010
+₹275.00
+1
+₹275.00
+0%
+IGST
+₹0.00
+₹275.00
+0%
+IGST
+₹0.00
+0%
+None
+₹0.00
+Shipping Charges
+₹40.00
+₹40.00
+0%
+IGST
+₹0.00
+₹40.00
+0%
+IGST
+₹0.00
+0%
+None
+₹0.00
+TOTAL:
+₹0.00
+₹315.00
+Amount in Words:
+Three Hundred Fifteen only
+Sold By :
+Repro Books Limited
+*
+Dharuhera, Rewari ,
+Haryana - 123110
+PAN No: AAECR4557N
+GST Registration No: 06AAECR4557N3ZU
+Billing Address :
+Customer Name
+1 Example Street, Bengaluru
+BENGALURU, KARNATAKA, 560001
+\f
+Tax Invoice/Bill of Supply/Cash Memo
+(Original for Recipient)
+Regd Office: Amazon Seller Services Private Limited
+Amazon.in - Amazon Seller Services Private Limited
+Page 1 of 1
+For Amazon Seller Services Private Limited:
+Authorized Signatory
+Order Number:171-0000000-0000001
+Invoice Number :POD-27-200000001
+Order Date:06.11.2026
+Invoice Details :HR-XQVZ-1044-2627
+Invoice Date :07.11.2026
+Sl. No Description
+Unit Price
+Qty Net Amount
+Tax Rate
+Tax Type
+Tax Amount
+Total Amount
+1
+Cash/Pay on Delivery fee:
+₹5.94
+₹5.94
+9%
+CGST
+₹0.53
+₹7.00
+9%
+SGST
+₹0.53
+TOTAL:
+₹1.06
+₹7.00
+Amount in Words:
+Seven only
+Digitally signed by DS AMAZON SELLER SERVICES PRIVATE LIMITED 6
+Date: 2026.11.06 19:42:55 UTC
+Sold By :
+Amazon Seller Services Private Limited
+*
+Bangalore, Karnataka – 560064
+GST Registration No:29AAICA3918J1ZE
+"""
+
+
+def test_split_documents_finds_both_invoices():
+    from extractor.parser import split_documents
+    docs = split_documents(AMAZON_TWO_INVOICES)
+    assert len(docs) == 2
+    assert "XQVZ-100001" in docs[0] and "POD-27-200000001" in docs[1]
+
+
+def test_split_keeps_a_multi_page_invoice_together():
+    from extractor.parser import split_documents
+    text = "Invoice No: A-1\nItem 10.00\n\f\nContinued\nGrand Total 10.00"
+    assert len(split_documents(text)) == 1
+    same_number = "Invoice No: A-1\nPage 1\n\f\nInvoice No: A-1\nPage 2"
+    assert len(split_documents(same_number)) == 1
+
+
+def test_amazon_two_invoices_amount_and_gst():
+    inv = parse_invoice(AMAZON_TWO_INVOICES, today=TODAY.replace(month=11, day=19))
+    assert inv.total_amount == 322.0                 # 315.00 book + 7.00 COD fee
+    assert (inv.cgst, inv.sgst, inv.igst) == (0.53, 0.53, 0.0)
+    assert inv.gst_total() == 1.06
+    assert inv.invoice_number == "XQVZ-100001"
+    assert inv.invoice_date == "2026-11-07"
+    assert inv.vendor == "Repro Books Limited"
+    assert inv.category == "Shopping"
+    assert [(d["invoice_number"], d["total_amount"], d["gst"]) for d in inv.documents] == [
+        ("XQVZ-100001", 315.0, 0.0), ("POD-27-200000001", 7.0, 1.06)]
+    junk = [i for i in inv.line_items if "Page" in i["description"] or i["amount"] == 123110]
+    assert junk == []
+
+
+def test_amazon_single_invoice_total_under_column_headings():
+    first_page = AMAZON_TWO_INVOICES.split("\f")[0]
+    inv = parse_invoice(first_page, today=TODAY.replace(month=11, day=19))
+    assert inv.total_amount == 315.0                 # not the "1" under "Total Amount"
+    assert inv.igst == 0.0 and inv.documents == []

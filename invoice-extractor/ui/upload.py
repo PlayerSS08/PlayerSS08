@@ -147,6 +147,8 @@ def result_card(key: str, result: dict) -> None:
                             "Confidence", min_value=0.0, max_value=1.0, format="%.2f"),
                         "Check": st.column_config.TextColumn("⚠️", width="small"),
                     })
+                components.gst_caption(invoice.cgst, invoice.sgst, invoice.igst, invoice.currency)
+                components.documents_table(invoice.documents, invoice.currency)
             with tab_items:
                 components.line_items_table(invoice.line_items, invoice.currency)
             with tab_raw:

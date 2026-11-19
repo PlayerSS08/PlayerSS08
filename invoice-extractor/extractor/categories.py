@@ -5,7 +5,9 @@ Rules, in order:
   1. the vendor is a known vendor of a category       -> confidence 0.9
   2. category keywords found in the invoice text       -> confidence 0.6
      (the category with the most keyword hits wins)
-  3. nothing matched                                   -> "Other", 0.3
+  3. a known vendor named anywhere in the text         -> confidence 0.5
+     (e.g. a seller's invoice printed by "Amazon.in" -> Shopping)
+  4. nothing matched                                   -> "Other", 0.3
 
 Categories and their words live in categories.json so they are easy to edit.
 `categorize()` is pure apart from reading that file once.
@@ -54,4 +56,12 @@ def categorize(vendor: Optional[str], text: str = "", categories: Optional[dict]
             scores[name] = hits
     if scores:
         return max(scores, key=scores.get), 0.6
+    first = None
+    for name, rules in categories.items():
+        for known in rules.get("vendors", []):
+            found = re.search(r"(?<![a-z])" + re.escape(known.lower()) + r"(?![a-z])", haystack)
+            if found and (first is None or found.start() < first[1]):
+                first = (name, found.start())
+    if first:
+        return first[0], 0.5
     return OTHER, 0.3
