@@ -1,0 +1,18 @@
+# IDE / editor folders
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Runtime data (database and drop-in folder)
+data/
+invoices/
+*.db
+
+# Offline wheels are added to the release zip only (too big for git)
+vendor/
